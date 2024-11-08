@@ -34,12 +34,16 @@ defmodule AIBrainworms.MixProject do
       {:shoehorn, "~> 0.9.1"},
       {:ring_logger, "~> 0.11.0"},
       {:toolshed, "~> 0.4.0"},
-      {:circuits_gpio, "~> 2.1"},
+
+      # might not need all of these, can thin out later
+      {:circuits_uart, "~> 1.3"},
+      {:circuits_gpio, "~> 2.0"},
+      {:circuits_i2c, "~> 2.0"},
       {:circuits_spi, "~> 2.0"},
 
       # Allow Nerves.Runtime on host to support development, testing and CI.
       # See config/host.exs for usage.
-      {:nerves_runtime, "~> 0.13.0"},
+      {:nerves_runtime, "~> 0.13.0", targets: @all_targets},
 
       # Dependencies for all targets except :host
       {:nerves_pack, "~> 0.7.1", targets: @all_targets},
