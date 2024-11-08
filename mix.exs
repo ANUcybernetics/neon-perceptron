@@ -3,7 +3,7 @@ defmodule AIBrainworms.MixProject do
 
   @app :ai_brainworms
   @version "0.1.0"
-  @all_targets [:rpi3]
+  @all_targets [:rpi4]
 
   def project do
     [
@@ -41,6 +41,10 @@ defmodule AIBrainworms.MixProject do
       {:circuits_i2c, "~> 2.0"},
       {:circuits_spi, "~> 2.0"},
 
+      # AI stuff
+      {:axon, "~> 0.7"},
+      # {:exla, "~> 0.8"},
+
       # Allow Nerves.Runtime on host to support development, testing and CI.
       # See config/host.exs for usage.
       {:nerves_runtime, "~> 0.13.0"},
@@ -53,7 +57,7 @@ defmodule AIBrainworms.MixProject do
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
       # version updates, please review their release notes in case
       # changes to your application are needed.
-      {:nerves_system_rpi3, "~> 1.24", runtime: false, targets: :rpi3}
+      {:nerves_system_rpi4, "~> 1.24", runtime: false, targets: :rpi4}
     ]
   end
 
