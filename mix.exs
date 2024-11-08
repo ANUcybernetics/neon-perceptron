@@ -21,7 +21,7 @@ defmodule AIBrainworms.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :runtime_tools, :circuits_gpio, :circuits_spi],
+      extra_applications: [:logger, :runtime_tools],
       mod: {AIBrainworms.Application, []}
     ]
   end
