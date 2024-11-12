@@ -7,7 +7,11 @@ defmodule BrainwormsTest do
     model = Brainworms.Model.new([4])
     {inputs, targets} = Brainworms.Train.training_set()
     params = Brainworms.Train.run(model, inputs, targets)
-    IO.inspect(params |> Map.keys())
-    IO.inspect(params |> Map.get(:data))
+
+    dense_0_sum = Map.get(params, :data)["dense_0"]["kernel"] |> Nx.sum()
+    dense_1_sum = Map.get(params, :data)["dense_1"]["kernel"] |> Nx.sum()
+
+    assert dense_0_sum != 0.0
+    assert dense_1_sum != 0.0
   end
 end
