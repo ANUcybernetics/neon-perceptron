@@ -7,7 +7,7 @@ defmodule Brainworms.Model do
   data structures. If you just follow this notebook you (probably) don't need to understand
   how they work.
   """
-  alias Brainworms.Number
+  alias Brainworms.Utils
 
   @doc """
   Create a fully-connected model
@@ -60,7 +60,7 @@ defmodule Brainworms.Model do
   def training_set() do
     inputs =
       0..9
-      |> Enum.map(&Number.encode_digit!/1)
+      |> Enum.map(&Utils.digit_to_bitlist!/1)
       |> Nx.tensor(names: [:digit, :bitlist], type: :u8)
 
     # a tensor of the (one-hot-encoded) digits 0-9 (one per row).
@@ -100,7 +100,7 @@ defmodule Brainworms.Model do
   For a given `digit` 0-9, return the predicted class distribution under `model`.
   """
   def predict(model, params, digit) do
-    input = Number.encode_digit!(digit) |> Nx.tensor() |> Nx.new_axis(0)
+    input = Utils.digit_to_bitlist!(digit) |> Nx.tensor() |> Nx.new_axis(0)
     Axon.predict(model, params, input)
   end
 end

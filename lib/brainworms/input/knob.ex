@@ -3,4 +3,8 @@ defmodule Brainworms.Input.Knob do
   This module concerns the rotary encoder knob used to sweep through
   the different possible patterns on the seven-segment display
   """
+
+  def update(input, position_delta) do
+    Integer.mod(input + position_delta, 0x7F)
+  end
 end

@@ -1,7 +1,5 @@
-defmodule BrainwormsTest do
+defmodule Brainworms.ModelTest do
   use ExUnit.Case
-
-  doctest Brainworms
 
   test "end-to-end test" do
     model = Brainworms.Model.new([4])
