@@ -1,4 +1,4 @@
-defmodule AIBrainworms.SevenSegment.Model do
+defmodule AIBrainworms.Model do
   @moduledoc """
   Helper module for defining fully-connected networks of different sizes.
 
@@ -17,7 +17,7 @@ defmodule AIBrainworms.SevenSegment.Model do
 
   Example: create a networks with a single hidden layer of 2 neurons:
 
-      iex> SevenSegment.Model.new([2])
+      iex> AIBrainworms.Model.new([2])
       #Axon<
         inputs: %{"bitlist" => {nil, 7}}
         outputs: "softmax_0"

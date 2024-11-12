@@ -2,7 +2,6 @@
 
 (in no particular order)
 
-- refactor module names (remove SevenSegment middle namespace)
 - add GenServer for managing everything (with mode, weights/model, last_touched,
   current_digit)
 - moar tests

@@ -1,9 +1,9 @@
-defmodule AIBrainworms.SevenSegment.Train do
+defmodule AIBrainworms.Train do
   @moduledoc """
   Create datasets and train models.
   """
 
-  alias AIBrainworms.SevenSegment.Number
+  alias AIBrainworms.Number
 
   @doc """
   Create a training set of bitlists for use as a training set.
@@ -18,7 +18,7 @@ defmodule AIBrainworms.SevenSegment.Train do
   Note that the returned tensor won't include the digits explicitly, but the digits can be used to index
   into the `:digit` axis to get the correct bitlist, e.g.
 
-      iex> train_data = SevenSegment.Train.inputs()
+      iex> train_data = AIBrainworms.Train.inputs()
       iex> train_data[[digit: 0]]
       #Nx.Tensor<
         u8[bitlist: 7]
