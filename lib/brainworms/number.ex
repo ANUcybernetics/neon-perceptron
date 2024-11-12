@@ -1,4 +1,4 @@
-defmodule AIBrainworms.Number do
+defmodule Brainworms.Number do
   @moduledoc """
   Data representation for both the 0-9 digits and the associated 7-segment bit patterns.
 
@@ -24,10 +24,10 @@ defmodule AIBrainworms.Number do
 
   This function will raise if `digit` is not a single (0-9) digit.
 
-      iex> AIBrainworms.Number.encode_digit!(1)
+      iex> Brainworms.Number.encode_digit!(1)
       [0, 0, 1, 0, 0, 1, 0]
 
-      iex> AIBrainworms.Number.encode_digit!(5)
+      iex> Brainworms.Number.encode_digit!(5)
       [1, 1, 0, 1, 0, 1, 1]
   """
   def encode_digit!(digit) do
@@ -40,10 +40,10 @@ defmodule AIBrainworms.Number do
 
   This function will raise if the bitlist doesn't correspond to a single (0-9) digit.
 
-      iex> AIBrainworms.Number.decode_digit!([1, 1, 1, 1, 1, 1, 1])
+      iex> Brainworms.Number.decode_digit!([1, 1, 1, 1, 1, 1, 1])
       8
 
-      iex> AIBrainworms.Number.decode_digit!([1, 1, 0, 1, 0, 1, 1])
+      iex> Brainworms.Number.decode_digit!([1, 1, 0, 1, 0, 1, 1])
       5
   """
   def decode_digit!(bitlist) do

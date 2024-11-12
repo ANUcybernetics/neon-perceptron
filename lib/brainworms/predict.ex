@@ -1,13 +1,13 @@
-defmodule AIBrainworms.Predict do
+defmodule Brainworms.Predict do
   @moduledoc """
   Run single-shot inference for a trained model.
 
   Intended use:
-  - `model` comes from `AIBrainworms.Model.new/1`
-  - `params` comes from `AIBrainworms.Train.run/4`
+  - `model` comes from `Brainworms.Model.new/1`
+  - `params` comes from `Brainworms.Train.run/4`
   """
 
-  alias AIBrainworms.Number
+  alias Brainworms.Number
 
   @doc """
   For a given `digit` 0-9, return the predicted class distribution under `model`.

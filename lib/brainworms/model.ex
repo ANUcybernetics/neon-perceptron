@@ -1,4 +1,4 @@
-defmodule AIBrainworms.Model do
+defmodule Brainworms.Model do
   @moduledoc """
   Helper module for defining fully-connected networks of different sizes.
 
@@ -17,7 +17,7 @@ defmodule AIBrainworms.Model do
 
   Example: create a networks with a single hidden layer of 2 neurons:
 
-      iex> AIBrainworms.Model.new([2])
+      iex> Brainworms.Model.new([2])
       #Axon<
         inputs: %{"bitlist" => {nil, 7}}
         outputs: "softmax_0"

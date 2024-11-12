@@ -1,4 +1,4 @@
-# AIBrainworms
+# Brainworms
 
 A _Cybernetic Studio_ project by Ben Swift & Brendan Traw.
 

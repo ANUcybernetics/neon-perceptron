@@ -3,4 +3,4 @@ erlang = "27.0.1"
 elixir = "1.17.3-otp-27"
 
 [env]
-MIX_TARGET = "rpi4"
+# MIX_TARGET = "rpi4"

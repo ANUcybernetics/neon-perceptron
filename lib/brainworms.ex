@@ -1,6 +1,6 @@
-defmodule AIBrainworms do
+defmodule Brainworms do
   @moduledoc """
-  Documentation for `AIBrainworms`.
+  Documentation for `Brainworms`.
   """
 
   @doc """
@@ -8,7 +8,7 @@ defmodule AIBrainworms do
 
   ## Examples
 
-      iex> AIBrainworms.hello()
+      iex> Brainworms.hello()
       :world
 
   """

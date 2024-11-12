@@ -1,9 +1,9 @@
-defmodule AIBrainworms.Train do
+defmodule Brainworms.Train do
   @moduledoc """
   Create datasets and train models.
   """
 
-  alias AIBrainworms.Number
+  alias Brainworms.Number
 
   @doc """
   Create a training set of bitlists for use as a training set.
@@ -18,7 +18,7 @@ defmodule AIBrainworms.Train do
   Note that the returned tensor won't include the digits explicitly, but the digits can be used to index
   into the `:digit` axis to get the correct bitlist, e.g.
 
-      iex> train_data = AIBrainworms.Train.inputs()
+      iex> train_data = Brainworms.Train.inputs()
       iex> train_data[[digit: 0]]
       #Nx.Tensor<
         u8[bitlist: 7]

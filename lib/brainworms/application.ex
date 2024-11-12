@@ -1,4 +1,4 @@
-defmodule AIBrainworms.Application do
+defmodule Brainworms.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
@@ -10,13 +10,13 @@ defmodule AIBrainworms.Application do
     children =
       [
         # Children for all targets
-        # Starts a worker by calling: AIBrainworms.Worker.start_link(arg)
-        # {AIBrainworms.Worker, arg},
+        # Starts a worker by calling: Brainworms.Worker.start_link(arg)
+        # {Brainworms.Worker, arg},
       ] ++ target_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: AIBrainworms.Supervisor]
+    opts = [strategy: :one_for_one, name: Brainworms.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
