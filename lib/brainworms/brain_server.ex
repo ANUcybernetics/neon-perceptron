@@ -63,7 +63,7 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:demo_lights, state) do
-    val = Utils.osc(1.0)
+    val = Utils.osc(0.2)
 
     data =
       0..23
