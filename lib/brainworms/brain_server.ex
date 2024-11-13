@@ -3,6 +3,7 @@ defmodule Brainworms.BrainServer do
   A GenServer for controlling the Brainworms.
   """
   use GenServer
+  alias Brainworms.Utils
 
   @display_refresh_interval 100
 
@@ -69,6 +70,21 @@ defmodule Brainworms.BrainServer do
     # finally, schedule the next update
     Process.send_after(self(), :update_lights, @display_refresh_interval)
     {:reply, :ok, %{state | mode: mode}}
+  end
+
+  @impl true
+  def handle_call(:demo_lights, _from, state) do
+    val = Utils.osc(1.0)
+
+    data =
+      0..23
+      |> Enum.map(fn _ -> 0.5 + 0.5 * val end)
+      |> Utils.pwm_encode()
+
+    Circuits.SPI.transfer!(state.device_refs[:wires], data)
+
+    Process.send_after(self(), :demo_lights, @display_refresh_interval)
+    {:reply, :ok, state}
   end
 
   @impl true
