@@ -16,13 +16,14 @@ defmodule Brainworms.BrainServer do
           input: integer(),
           model: Axon.t(),
           last_activity: DateTime.t(),
-          device_refs: %{wires: reference()}
+          devices: %{spi: reference(), gpio: Circuits.GPIO.Handle.t()}
         }
 
   @spec init(:ok) :: {:ok, state()}
   @impl true
   def init(:ok) do
-    wires_ref = Brainworms.Display.Wires.init()
+    {:ok, spi} = Circuits.SPI.open("spidev0.0")
+    {:ok, gpio} = Circuits.GPIO.open("PIN18", :input)
 
     # give it 1s to start up the first time (although not really needed)
     Process.send_after(self(), :update_lights, 1_000)
@@ -33,7 +34,7 @@ defmodule Brainworms.BrainServer do
        input: 0,
        model: Brainworms.Model.new([4]),
        last_activity: DateTime.utc_now(),
-       device_refs: %{wires: wires_ref}
+       devices: %{spi: spi, gpio: gpio}
      }}
   end
 
@@ -64,8 +65,8 @@ defmodule Brainworms.BrainServer do
         state.mode
       end
 
-    # Brainworms.Display.SevenSegment.light_up(mode, state.device_refs[:wires], state.input)
-    # Brainworms.Display.Wires.light_up(mode, state.device_refs[:wires], state.model)
+    # Brainworms.Display.SevenSegment.light_up(mode, state.devices[:spi], state.input)
+    # Brainworms.Display.Wires.light_up(mode, state.devices[:spi], state.model)
 
     # finally, schedule the next update
     Process.send_after(self(), :update_lights, @display_refresh_interval)
@@ -81,7 +82,7 @@ defmodule Brainworms.BrainServer do
       |> Enum.map(fn _ -> 0.5 + 0.5 * val end)
       |> Utils.pwm_encode()
 
-    Circuits.SPI.transfer!(state.device_refs[:wires], data)
+    Circuits.SPI.transfer!(state.devices[:spi], data)
 
     Process.send_after(self(), :demo_lights, @display_refresh_interval)
     {:reply, :ok, state}
