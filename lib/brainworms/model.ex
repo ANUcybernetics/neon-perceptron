@@ -41,7 +41,7 @@ defmodule Brainworms.Model do
   z there are only 10 pairs in the training set. Toy problems ftw :)
 
   The output won't be a list of lists, it'll be an [Nx](https://hexdocs.pm/nx/) tensor,
-  because that's what's expected by the trainingkcode.
+  because that's what's expected by the training code.
 
   Note that the returned tensor won't include the digits explicitly, but the digits can be used to index
   into the `:digit` axis to get the correct bitlist, e.g.
