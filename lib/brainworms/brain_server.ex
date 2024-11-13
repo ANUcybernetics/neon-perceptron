@@ -56,7 +56,28 @@ defmodule Brainworms.BrainServer do
   end
 
   @impl true
-  def handle_call(:update_lights, _from, state) do
+  def handle_call(:reset, _from, state) do
+    # reset model state
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_info(:demo_lights, state) do
+    val = Utils.osc(1.0)
+
+    data =
+      0..23
+      |> Enum.map(fn _ -> 0.5 + 0.5 * val end)
+      |> Utils.pwm_encode()
+
+    Circuits.SPI.transfer!(state.devices[:spi], data)
+
+    Process.send_after(self(), :demo_lights, @display_refresh_interval)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(:update_lights, state) do
     mode =
       if state.mode == :inference and
            DateTime.diff(DateTime.utc_now(), state.last_activity) > 10 do
@@ -70,27 +91,6 @@ defmodule Brainworms.BrainServer do
 
     # finally, schedule the next update
     Process.send_after(self(), :update_lights, @display_refresh_interval)
-    {:reply, :ok, %{state | mode: mode}}
-  end
-
-  @impl true
-  def handle_call(:demo_lights, _from, state) do
-    val = Utils.osc(1.0)
-
-    data =
-      0..23
-      |> Enum.map(fn _ -> 0.5 + 0.5 * val end)
-      |> Utils.pwm_encode()
-
-    Circuits.SPI.transfer!(state.devices[:spi], data)
-
-    Process.send_after(self(), :demo_lights, @display_refresh_interval)
-    {:reply, :ok, state}
-  end
-
-  @impl true
-  def handle_call(:reset, _from, state) do
-    # reset model state
-    {:reply, :ok, state}
+    {:noreply, %{state | mode: mode}}
   end
 end
