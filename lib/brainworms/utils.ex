@@ -50,4 +50,10 @@ defmodule Brainworms.Utils do
     digit = Enum.find_index(@bitlists, fn bp -> bp == bitlist end)
     digit || raise "bitlist did not correspond to a digit 0-9"
   end
+
+  def osc(frequency, phase \\ 0.0) do
+    t = :os.system_time(:nanosecond) / 1.0e9
+
+    :math.sin(2 * :math.pi() * (t * frequency + phase))
+  end
 end
