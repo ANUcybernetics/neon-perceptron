@@ -56,4 +56,22 @@ defmodule Brainworms.Utils do
 
     :math.sin(2 * :math.pi() * (t * frequency + phase))
   end
+
+  @doc """
+  Encode a list of integers as a binary string of 12-bit unsigned integers
+
+  Input values should be floats in the range [0.0, 1.0], they will be converted to
+  12-bit integers and packed into a binary string.
+
+  Useful for writing to PWM registers like on
+  [this board](https://core-electronics.com.au/adafruit-24-channel-12-bit-pwm-led-driver-spi-interface-tlc5947.html).
+
+  No overflow checking is done.
+  """
+  def pwm_encode(values) when is_list(values) do
+    values
+    |> Enum.map(&((&1 * 4095.9999999999) |> trunc()))
+    |> Enum.map(&<<&1::unsigned-integer-size(12)>>)
+    |> Enum.reduce(<<>>, fn x, acc -> <<acc::bitstring, x::bitstring>> end)
+  end
 end
