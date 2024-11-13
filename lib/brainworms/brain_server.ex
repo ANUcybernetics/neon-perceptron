@@ -56,6 +56,11 @@ defmodule Brainworms.BrainServer do
   end
 
   @impl true
+  def handle_call(:get_state, _from, state) do
+    {:reply, state, state}
+  end
+
+  @impl true
   def handle_call(:reset, _from, state) do
     # reset model state
     {:reply, :ok, state}
