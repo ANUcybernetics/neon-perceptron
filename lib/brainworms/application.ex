@@ -11,7 +11,7 @@ defmodule Brainworms.Application do
       [
         # Children for all targets
         # Starts a worker by calling: Brainworms.Worker.start_link(arg)
-        # {Brainworms.Worker, arg},
+        Brainworms.BrainServer
       ] ++ target_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
