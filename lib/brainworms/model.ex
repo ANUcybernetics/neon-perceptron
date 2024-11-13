@@ -82,7 +82,7 @@ defmodule Brainworms.Model do
   """
   def train(model, inputs, targets, opts \\ []) do
     # since this training set is so small, use batches of size 1
-    data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
+    train_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
 
     opts = Keyword.merge(opts, epochs: 1000)
     # opts = Keyword.merge(opts, epochs: 1000, compiler: EXLA)
@@ -90,7 +90,7 @@ defmodule Brainworms.Model do
     model
     |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
     |> Axon.Loop.metric(:accuracy, "Accuracy")
-    |> Axon.Loop.run(data, %{}, opts)
+    |> Axon.Loop.run(train_data, %{}, opts)
   end
 
   @doc """
