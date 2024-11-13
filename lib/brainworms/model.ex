@@ -27,7 +27,7 @@ defmodule Brainworms.Model do
       >
 
   """
-  def new(hidden_layer_sizes) do
+  def new(hidden_layer_sizes) when is_list(hidden_layer_sizes) do
     input = Axon.input("bitlist", shape: {nil, 7})
 
     hidden_layer_sizes
@@ -36,6 +36,9 @@ defmodule Brainworms.Model do
     end)
     |> Axon.dense(10, activation: :softmax)
   end
+
+  # helper function for when there's just one hidden layer
+  def new(hidden_layer_size), do: new([hidden_layer_size])
 
   @doc """
   Create a training set of bitlists for use as a training set.

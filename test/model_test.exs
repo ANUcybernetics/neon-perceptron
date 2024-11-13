@@ -2,7 +2,7 @@ defmodule Brainworms.ModelTest do
   use ExUnit.Case
 
   test "end-to-end test" do
-    model = Brainworms.Model.new([4])
+    model = Brainworms.Model.new(2)
     {inputs, targets} = Brainworms.Model.training_set()
     params = Brainworms.Model.train(model, inputs, targets)
 
