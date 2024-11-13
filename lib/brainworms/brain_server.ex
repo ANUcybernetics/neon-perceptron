@@ -16,14 +16,13 @@ defmodule Brainworms.BrainServer do
           input: integer(),
           model: Axon.t(),
           last_activity: DateTime.t(),
-          devices: %{spi: reference(), gpio: Circuits.GPIO.Handle.t()}
+          devices: %{spi: reference()}
         }
 
   @spec init(:ok) :: {:ok, state()}
   @impl true
   def init(:ok) do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
-    {:ok, gpio} = Circuits.GPIO.open("PIN18", :input)
 
     # give it 1s to start up the first time (although not really needed)
     Process.send_after(self(), :demo_lights, 1_000)
@@ -35,7 +34,7 @@ defmodule Brainworms.BrainServer do
        input: 0,
        model: Brainworms.Model.new(4),
        last_activity: DateTime.utc_now(),
-       devices: %{spi: spi, gpio: gpio}
+       devices: %{spi: spi}
      }}
   end
 
