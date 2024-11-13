@@ -32,7 +32,7 @@ defmodule Brainworms.BrainServer do
      %{
        mode: :inference,
        input: 0,
-       model: Brainworms.Model.new([4]),
+       model: Brainworms.Model.new(4),
        last_activity: DateTime.utc_now(),
        devices: %{spi: spi, gpio: gpio}
      }}

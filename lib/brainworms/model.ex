@@ -12,14 +12,14 @@ defmodule Brainworms.Model do
   @doc """
   Create a fully-connected model
 
-  The model will have a 7-dimensional input (for the bitlists) and a 10-dimensional
-  output (for the softmax predictions; one for each digit 0-9).
+  The model will have a 7-dimensional input (each one corresponding to a segment in the
+  display) and a 10-dimensional output (for the softmax predictions; one for each digit 0-9).
 
-  `hidden_layer_sizes` should be a list of sizes for the hidden layers.
+  `hidden_layer_sizes` is the size of the hidden layer.
 
   Example: create a networks with a single hidden layer of 2 neurons:
 
-      iex> Brainworms.Model.new([2])
+      iex> Brainworms.Model.new(2)
       #Axon<
         inputs: %{"bitlist" => {nil, 7}}
         outputs: "softmax_0"
@@ -27,18 +27,11 @@ defmodule Brainworms.Model do
       >
 
   """
-  def new(hidden_layer_sizes) when is_list(hidden_layer_sizes) do
-    input = Axon.input("bitlist", shape: {nil, 7})
-
-    hidden_layer_sizes
-    |> Enum.reduce(input, fn layer_size, model ->
-      Axon.dense(model, layer_size, activation: :relu)
-    end)
+  def new(hidden_layer_size) do
+    Axon.input("bitlist", shape: {nil, 7})
+    |> Axon.dense(hidden_layer_size, activation: :relu)
     |> Axon.dense(10, activation: :softmax)
   end
-
-  # helper function for when there's just one hidden layer
-  def new(hidden_layer_size), do: new([hidden_layer_size])
 
   @doc """
   Create a training set of bitlists for use as a training set.
