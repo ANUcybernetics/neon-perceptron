@@ -67,23 +67,23 @@ defmodule Brainworms.Model do
       |> Nx.new_axis(-1, :one_hot)
       |> Nx.equal(Nx.tensor(Enum.to_list(0..9)))
 
-    {inputs, targets}
+    Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
   end
 
   @doc """
-  Run the training procedure, returning a map of (trained) params
+  Creates a loop for training the model.
+
+  Returns an Axon loop configured with categorical cross-entropy loss,
+  the Adam optimizer, and accuracy metrics.
   """
-  def train(model, inputs, targets, opts \\ []) do
-    # since this training set is so small, use batches of size 1
-    train_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
-
-    opts = Keyword.merge(opts, epochs: 1000)
-    # opts = Keyword.merge(opts, epochs: 1000, compiler: EXLA)
-
-    model
+  def init_loop() do
+    Brainworms.Model.new(2)
     |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
     |> Axon.Loop.metric(:accuracy, "Accuracy")
-    |> Axon.Loop.run(train_data, %{}, opts)
+    |> Axon.Loop.handle_event(:epoch_completed, fn state ->
+      # dbg(state.step_state.model_state)
+      {:halt_loop, state}
+    end)
   end
 
   @doc """
