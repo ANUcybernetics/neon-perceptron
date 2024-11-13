@@ -26,7 +26,8 @@ defmodule Brainworms.BrainServer do
     {:ok, gpio} = Circuits.GPIO.open("PIN18", :input)
 
     # give it 1s to start up the first time (although not really needed)
-    Process.send_after(self(), :update_lights, 1_000)
+    Process.send_after(self(), :demo_lights, 1_000)
+    # Process.send_after(self(), :update_lights, 1_000)
 
     {:ok,
      %{
