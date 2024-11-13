@@ -5,7 +5,7 @@ defmodule Brainworms.BrainServer do
   use GenServer
   alias Brainworms.Utils
 
-  @display_refresh_interval 100
+  @display_refresh_interval 10
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
