@@ -3,12 +3,13 @@ defmodule Brainworms.Display.SevenSegment do
   Functions for lighting up the seven-segment display.
   """
 
-  alias Brainworms.MCP23017
-
-  def set(bus, digit) do
+  # NOTE? this will return binaries, but don't be fooled by the printed representation
+  # which uses bytes, not 12-bit words
+  def to_pwm_binary(digit) do
+    digit
+    |> Brainworms.Utils.digit_to_bitlist!()
     # final 0 is the decimal point
-    bitlist = Brainworms.Utils.digit_to_bitlist!(digit) ++ [0]
-    data = :erlang.list_to_binary(bitlist)
-    MCP23017.write_port_a(bus, data)
+    |> List.insert_at(-1, 0)
+    |> Brainworms.Utils.pwm_encode()
   end
 end
