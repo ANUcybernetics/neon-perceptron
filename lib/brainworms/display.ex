@@ -8,18 +8,20 @@ defmodule Brainworms.Display do
 
   def set(spi_bus, digit, _model) do
     # for now, just "breathe" the wires... until we can process the model properly
-    c1_data = <<0::size(192)>> <> SevenSegment.to_pwm_binary(digit)
+    c1_brightness_list = SevenSegment.to_brightness_list(digit) ++ List.duplicate(1.0, 16)
 
-    c2_data =
+    c2_brightness_list =
       Range.new(1, 24)
       |> Enum.map(fn _ -> 0.5 + 0.5 * Utils.osc(0.2) end)
-      |> Utils.pwm_encode()
 
-    c3_data =
+    c3_brightness_list =
       Range.new(1, 24)
       |> Enum.map(fn _ -> :rand.uniform() end)
+
+    data =
+      Enum.reverse(c1_brightness_list ++ c2_brightness_list ++ c3_brightness_list)
       |> Utils.pwm_encode()
 
-    Circuits.SPI.transfer!(spi_bus, c3_data <> c2_data <> c1_data)
+    Circuits.SPI.transfer!(spi_bus, data)
   end
 end
