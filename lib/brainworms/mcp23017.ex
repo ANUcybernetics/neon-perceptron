@@ -19,7 +19,7 @@ defmodule Brainworms.MCP23017 do
     I2C.write!(bus, @i2c_address, <<@iodira, 0x00>>)
 
     # Configure PB0 and PB1 on Port B as inputs, keep others as outputs
-    I2C.write!(bus, @i2c_address, <<@iodirb, 0x03>>)
+    I2C.write!(bus, @i2c_address, <<@iodirb, 0xFF>>)
 
     :ok
   end
