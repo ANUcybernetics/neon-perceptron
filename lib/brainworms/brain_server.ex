@@ -90,4 +90,10 @@ defmodule Brainworms.BrainServer do
     Process.send_after(self(), :update_lights, @display_refresh_interval)
     {:noreply, %{state | mode: mode}}
   end
+
+  ## client api
+
+  def get_state do
+    GenServer.call(__MODULE__, :get_state)
+  end
 end
