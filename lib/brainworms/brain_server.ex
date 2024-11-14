@@ -24,7 +24,7 @@ defmodule Brainworms.BrainServer do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
 
     # give it 1s to start up the first time (although not really needed)
-    Process.send_after(self(), :demo_lights, @display_refresh_interval)
+    Process.send_after(self(), :demo, @display_refresh_interval)
     # Process.send_after(self(), :update_lights, 1_000)
 
     {:ok,
@@ -66,13 +66,13 @@ defmodule Brainworms.BrainServer do
   end
 
   @impl true
-  def handle_info(:demo_lights, state) do
+  def handle_info(:demo, state) do
     # Brainworms.Display.Wires.breathe(state.devices.spi)
 
     digit = DateTime.utc_now().second |> Integer.mod(10)
     Brainworms.Display.set(state.devices.spi, digit, state.model)
 
-    Process.send_after(self(), :demo_lights, @display_refresh_interval)
+    Process.send_after(self(), :demo, @display_refresh_interval)
     {:noreply, state}
   end
 
