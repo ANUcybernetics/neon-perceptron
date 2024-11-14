@@ -39,11 +39,11 @@ defmodule Brainworms.BrainServer do
   end
 
   @impl true
-  def handle_call({:knob, position_delta}, _from, state) do
+  def handle_call({:knob, position}, _from, state) do
     {:reply, :ok,
      %{
        state
-       | input: Brainworms.Input.Knob.update(state.input, position_delta),
+       | input: position,
          mode: :inference,
          last_activity: DateTime.utc_now()
      }}
