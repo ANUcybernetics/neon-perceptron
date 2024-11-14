@@ -67,7 +67,10 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:demo_lights, state) do
-    Brainworms.Display.Wires.breathe(state.devices.spi)
+    # Brainworms.Display.Wires.breathe(state.devices.spi)
+
+    digit = DateTime.utc_now().second |> Integer.mod(10)
+    Brainworms.Display.set(state.devices.spi, digit, state.model)
 
     Process.send_after(self(), :demo_lights, @display_refresh_interval)
     {:noreply, state}
