@@ -16,13 +16,14 @@ defmodule Brainworms.BrainServer do
           input: integer(),
           model: Axon.t(),
           last_activity: DateTime.t(),
-          devices: %{spi: reference()}
+          devices: %{spi: reference(), i2c: reference()}
         }
 
   @spec init(:ok) :: {:ok, state()}
   @impl true
   def init(:ok) do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
+    {:ok, i2c} = Circuits.I2C.open("i2c-1")
 
     # give it 1s to start up the first time (although not really needed)
     Process.send_after(self(), :demo_lights, 1_000)
@@ -34,7 +35,7 @@ defmodule Brainworms.BrainServer do
        input: 0,
        model: Brainworms.Model.new(4),
        last_activity: DateTime.utc_now(),
-       devices: %{spi: spi}
+       devices: %{spi: spi, i2c: i2c}
      }}
   end
 
