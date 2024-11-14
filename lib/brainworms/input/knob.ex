@@ -23,8 +23,8 @@ defmodule Brainworms.Input.Knob do
      %{
        pin_a: pin_a,
        pin_b: pin_b,
-       last_a: GPIO.read(pin_a),
-       last_b: GPIO.read(pin_b),
+       previous_a: GPIO.read(pin_a),
+       previous_b: GPIO.read(pin_b),
        position: 0
      }}
   end
@@ -35,12 +35,12 @@ defmodule Brainworms.Input.Knob do
       determine_direction(
         value,
         GPIO.read(state.pin_b),
-        state.last_a,
-        state.last_b,
+        state.previous_a,
+        state.previous_b,
         state.position
       )
 
-    {:noreply, %{state | last_a: value, position: new_position}}
+    {:noreply, %{state | previous_a: value, position: new_position}}
   end
 
   # Handler for GPIO18 (Pin B)
@@ -49,16 +49,16 @@ defmodule Brainworms.Input.Knob do
       determine_direction(
         GPIO.read(state.pin_a),
         value,
-        state.last_a,
-        state.last_b,
+        state.previous_a,
+        state.previous_b,
         state.position
       )
 
-    {:noreply, %{state | last_b: value, position: new_position}}
+    {:noreply, %{state | previous_b: value, position: new_position}}
   end
 
-  defp determine_direction(a, b, last_a, last_b, position) do
-    case {last_a, last_b, a, b} do
+  defp determine_direction(a, b, previous_a, previous_b, position) do
+    case {previous_a, previous_b, a, b} do
       # Clockwise
       {1, 1, 0, 1} -> position + 1
       # Clockwise
