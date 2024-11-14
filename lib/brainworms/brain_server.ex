@@ -3,7 +3,6 @@ defmodule Brainworms.BrainServer do
   A GenServer for controlling the Brainworms.
   """
   use GenServer
-  alias Brainworms.Utils
 
   @display_refresh_interval 10
 
@@ -25,7 +24,7 @@ defmodule Brainworms.BrainServer do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
 
     # give it 1s to start up the first time (although not really needed)
-    Process.send_after(self(), :demo_lights, 1_000)
+    Process.send_after(self(), :demo_lights, @display_refresh_interval)
     # Process.send_after(self(), :update_lights, 1_000)
 
     {:ok,
@@ -68,7 +67,7 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:demo_lights, state) do
-    Brainworms.Display.Wires.set_all(state.devices.spi, 0.5 + 0.5 * Utils.osc(0.5))
+    Brainworms.Display.Wires.breathe(state.devices.spi)
 
     Process.send_after(self(), :demo_lights, @display_refresh_interval)
     {:noreply, state}
