@@ -5,7 +5,7 @@ defmodule Brainworms.Display.Wires do
 
   alias Brainworms.Utils
 
-  @pwm_controller_count 2
+  @pwm_controller_count Application.compile_env!(:brainworms, :pwm_controller_count)
 
   def set_all(spi_bus, value) do
     data =
