@@ -5,7 +5,7 @@
 # this project.
 import Config
 
-config :brainworms, :pwm_controller_count, 2
+config :brainworms, :pwm_controller_count, 3
 
 # Enable the Nerves integration with Mix
 Application.start(:nerves_bootstrap)
