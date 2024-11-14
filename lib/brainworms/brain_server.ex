@@ -69,14 +69,7 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:demo_lights, state) do
-    val = Utils.osc(0.2)
-
-    data =
-      0..23
-      |> Enum.map(fn _ -> Utils.gamma_correction(0.5 + 0.5 * val) end)
-      |> Utils.pwm_encode()
-
-    Circuits.SPI.transfer!(state.devices[:spi], data)
+    Brainworms.Display.Wires.light_all(state.devices.spi, Utils.osc(0.5))
 
     Process.send_after(self(), :demo_lights, @display_refresh_interval)
     {:noreply, state}
