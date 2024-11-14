@@ -71,8 +71,8 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:demo_lights, state) do
-    Brainworms.Display.Wires.light_all(state.devices.spi, Utils.osc(0.5))
     Brainworms.Display.SevenSegment.light_up(state.devices.i2c, 5)
+    Brainworms.Display.Wires.light_all(state.devices.spi, 0.5 + 0.5 * Utils.osc(0.5))
 
     Process.send_after(self(), :demo_lights, @display_refresh_interval)
     {:noreply, state}
