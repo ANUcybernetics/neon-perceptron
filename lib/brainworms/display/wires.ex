@@ -13,7 +13,7 @@ defmodule Brainworms.Display.Wires do
   def light_all(spi_bus, value) do
     data =
       0..23
-      |> Enum.map(fn _ -> Utils.gamma_correction(value) end)
+      |> Enum.map(fn _ -> Utils.gamma_correction(max(0.0, min(1.0, value))) end)
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
