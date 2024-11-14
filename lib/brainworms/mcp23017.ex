@@ -1,7 +1,7 @@
 defmodule Brainworms.MCP23017 do
   alias Circuits.I2C
   # MCP23017 default address; adjust if necessary
-  @i2c_address 0x20
+  @i2c_address 0x27
 
   # MCP23017 Register Addresses
   # I/O direction for Port A
