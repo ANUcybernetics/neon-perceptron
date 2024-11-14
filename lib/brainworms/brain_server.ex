@@ -23,7 +23,9 @@ defmodule Brainworms.BrainServer do
   @impl true
   def init(:ok) do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
+
     {:ok, i2c} = Circuits.I2C.open("i2c-1")
+    Brainworms.MCP23017.init!(i2c)
 
     # give it 1s to start up the first time (although not really needed)
     Process.send_after(self(), :demo_lights, 1_000)
@@ -70,6 +72,7 @@ defmodule Brainworms.BrainServer do
   @impl true
   def handle_info(:demo_lights, state) do
     Brainworms.Display.Wires.light_all(state.devices.spi, Utils.osc(0.5))
+    Brainworms.Display.SevenSegment.light_up(state.devices.i2c, 5)
 
     Process.send_after(self(), :demo_lights, @display_refresh_interval)
     {:noreply, state}

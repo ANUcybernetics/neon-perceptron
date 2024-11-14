@@ -25,8 +25,8 @@ defmodule Brainworms.MCP23017 do
   end
 
   # Write a byte to Port A
-  def write_port_a(bus, data) when is_integer(data) and data >= 0 and data <= 255 do
-    I2C.write(bus, @i2c_address, <<@gpioa, data>>)
+  def write_port_a(bus, data) do
+    I2C.write(bus, @i2c_address, <<@gpioa>> <> data)
   end
 
   # Read the state of PB0 and PB1 on Port B

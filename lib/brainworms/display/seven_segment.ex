@@ -3,11 +3,12 @@ defmodule Brainworms.Display.SevenSegment do
   Functions for lighting up the seven-segment display.
   """
 
-  def light_up(_mode, _ref, %{input: current_value}) do
-    _bitlist = Brainworms.Utils.digit_to_bitlist!(current_value)
+  alias Brainworms.MCP23017
 
-    # TODO update the display, based on the current value
-
-    :ok
+  def light_up(bus, digit) do
+    # final 0 is the decimal point
+    bitlist = Brainworms.Utils.digit_to_bitlist!(digit) ++ [0]
+    data = :erlang.list_to_binary(bitlist)
+    MCP23017.write_port_a(bus, data)
   end
 end
