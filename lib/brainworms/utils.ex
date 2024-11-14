@@ -57,6 +57,11 @@ defmodule Brainworms.Utils do
     :math.sin(2 * :math.pi() * (t * frequency + phase))
   end
 
+  def gamma_correction(value) do
+    gamma = 2.8
+    :math.pow(value, gamma)
+  end
+
   @doc """
   Encode a list of integers as a binary string of 12-bit unsigned integers
 

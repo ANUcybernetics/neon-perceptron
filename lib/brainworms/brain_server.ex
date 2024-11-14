@@ -72,7 +72,7 @@ defmodule Brainworms.BrainServer do
 
     data =
       0..23
-      |> Enum.map(fn _ -> 0.5 + 0.5 * val end)
+      |> Enum.map(fn _ -> Utils.gamma_correction(0.5 + 0.5 * val) end)
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(state.devices[:spi], data)
