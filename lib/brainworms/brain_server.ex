@@ -68,7 +68,7 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:demo_lights, state) do
-    Brainworms.Display.Wires.light_all(state.devices.spi, 0.5 + 0.5 * Utils.osc(0.5))
+    Brainworms.Display.Wires.set_all(state.devices.spi, 0.5 + 0.5 * Utils.osc(0.5))
 
     Process.send_after(self(), :demo_lights, @display_refresh_interval)
     {:noreply, state}
@@ -83,9 +83,6 @@ defmodule Brainworms.BrainServer do
       else
         state.mode
       end
-
-    # Brainworms.Display.SevenSegment.light_up(mode, state.devices[:spi], state.input)
-    # Brainworms.Display.Wires.light_up(mode, state.devices[:spi], state.model)
 
     # finally, schedule the next update
     Process.send_after(self(), :update_lights, @display_refresh_interval)

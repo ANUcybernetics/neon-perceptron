@@ -5,7 +5,7 @@ defmodule Brainworms.Display.SevenSegment do
 
   alias Brainworms.MCP23017
 
-  def light_up(bus, digit) do
+  def set(bus, digit) do
     # final 0 is the decimal point
     bitlist = Brainworms.Utils.digit_to_bitlist!(digit) ++ [0]
     data = :erlang.list_to_binary(bitlist)

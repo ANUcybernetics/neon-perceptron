@@ -7,12 +7,12 @@ defmodule Brainworms.Display.Wires do
 
   @pwm_controller_count 2
 
-  def light_up(_mode, _ref, _model_state) do
+  def set(_mode, _ref, _model_state) do
     # TODO
     true
   end
 
-  def light_all(spi_bus, value) do
+  def set_all(spi_bus, value) do
     corrected_value = Utils.gamma_correction(max(0.0, min(1.0, value)))
 
     data =
