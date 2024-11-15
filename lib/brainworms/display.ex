@@ -7,7 +7,7 @@ defmodule Brainworms.Display do
 
   def set(spi_bus, digit, _model) do
     # for now, just "breathe" the wires... until we can process the model properly
-    c1_brightness_list = Utils.digit_to_bitlist!(digit) ++ List.duplicate(1.0, 17)
+    c1_brightness_list = Utils.digit_to_bitlist(digit) ++ List.duplicate(1.0, 17)
 
     c2_brightness_list =
       Range.new(1, 24)
