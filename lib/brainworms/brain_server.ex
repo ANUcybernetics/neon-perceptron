@@ -12,7 +12,6 @@ defmodule Brainworms.BrainServer do
 
   @type state :: %{
           mode: :inference | :training,
-          input: integer(),
           model: Axon.t(),
           last_activity: DateTime.t(),
           devices: %{spi: reference()}
@@ -30,21 +29,9 @@ defmodule Brainworms.BrainServer do
     {:ok,
      %{
        mode: :inference,
-       input: 0,
        model: Brainworms.Model.new(4),
        last_activity: DateTime.utc_now(),
        devices: %{spi: spi}
-     }}
-  end
-
-  @impl true
-  def handle_call({:knob, position}, _from, state) do
-    {:reply, :ok,
-     %{
-       state
-       | input: position,
-         mode: :inference,
-         last_activity: DateTime.utc_now()
      }}
   end
 
