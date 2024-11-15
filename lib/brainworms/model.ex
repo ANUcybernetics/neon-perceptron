@@ -1,4 +1,7 @@
 defmodule Brainworms.Model do
+  use GenServer
+  alias Brainworms.Utils
+
   @moduledoc """
   Helper module for defining, training and running inference with fully-connected
   networks for the "map a seven-segment digit to the number displayed" problem.
@@ -7,7 +10,38 @@ defmodule Brainworms.Model do
   data structures. If you just follow this notebook you (probably) don't need to understand
   how they work.
   """
-  alias Brainworms.Utils
+
+  @inter_epoch_sleep 100
+
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @impl true
+  def init(_opts) do
+    model = new(2)
+    training_data = training_set()
+
+    # train the model for one epoch, but then halt (and send the :train_epoch message to self to continue training in 100ms)
+    model
+    |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
+    |> Axon.Loop.metric(:accuracy, "Accuracy")
+    |> Axon.Loop.handle_event(:epoch_completed, fn loop_state ->
+      Process.send_after(self(), {:train_epoch, loop_state}, @inter_epoch_sleep)
+      {:halt_loop, loop_state}
+    end)
+    |> Axon.Loop.run(training_data, Axon.ModelState.empty())
+
+    {:ok, %{model: model, training_data: training_data}}
+  end
+
+  @impl true
+  def handle_info({:train_epoch, loop_state}, state) do
+    # the attached :epoch_completed handler already fires off a new message to self
+    Axon.Loop.run(loop_state, state.training_data)
+
+    {:noreply, state}
+  end
 
   @doc """
   Create a fully-connected model
