@@ -56,7 +56,8 @@ defmodule Brainworms.BrainServer do
   def handle_info(:demo, state) do
     # Brainworms.Display.Wires.breathe(state.devices.spi)
 
-    digit = DateTime.utc_now().second |> Integer.mod(10)
+    position = Brainworms.Input.Knob.get_position()
+    digit = Integer.mod(div(position, 4), 10)
     Brainworms.Display.set(state.devices.spi, digit, state.model)
 
     Process.send_after(self(), :demo, @display_refresh_interval)
