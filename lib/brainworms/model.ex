@@ -29,14 +29,22 @@ defmodule Brainworms.Model do
   """
   def new(hidden_layer_size) do
     Axon.input("bitlist", shape: {nil, 7})
-    # |> Axon.attach_hook(fn val -> IO.inspect(val, label: :seven_segment) end, on: :forward)
+    |> Axon.attach_hook(fn val -> IO.inspect(val, label: :seven_segment) end,
+      on: :forward,
+      mode: :inference
+    )
     |> Axon.dense(hidden_layer_size)
     |> Axon.relu()
-    # |> Axon.attach_hook(fn val -> IO.inspect(val, label: :hidden_activations) end, on: :forward)
+    |> Axon.attach_hook(fn val -> IO.inspect(val, label: :hidden_activations) end,
+      on: :forward,
+      mode: :inference
+    )
     |> Axon.dense(10)
     |> Axon.activation(:softmax)
-
-    # |> Axon.attach_hook(fn val -> IO.inspect(val, label: :softmax_outputs) end, on: :forward)
+    |> Axon.attach_hook(fn val -> IO.inspect(val, label: :softmax_outputs) end,
+      on: :forward,
+      mode: :inference
+    )
   end
 
   @doc """
