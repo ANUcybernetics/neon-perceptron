@@ -3,12 +3,11 @@ defmodule Brainworms.Display do
   Handles display output through PWM controllers.
   """
 
-  alias Brainworms.Display.SevenSegment
   alias Brainworms.Utils
 
   def set(spi_bus, digit, _model) do
     # for now, just "breathe" the wires... until we can process the model properly
-    c1_brightness_list = SevenSegment.to_brightness_list(digit) ++ List.duplicate(1.0, 16)
+    c1_brightness_list = Utils.digit_to_bitlist!(digit) ++ List.duplicate(1.0, 17)
 
     c2_brightness_list =
       Range.new(1, 24)
