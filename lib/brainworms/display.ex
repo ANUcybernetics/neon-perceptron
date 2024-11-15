@@ -14,12 +14,8 @@ defmodule Brainworms.Display do
       Range.new(1, 24)
       |> Enum.map(fn _ -> 0.5 + 0.5 * Utils.osc(0.2) end)
 
-    c3_brightness_list =
-      Range.new(1, 24)
-      |> Enum.map(fn _ -> :rand.uniform() end)
-
     data =
-      Enum.reverse(c1_brightness_list ++ c2_brightness_list ++ c3_brightness_list)
+      Enum.reverse(c1_brightness_list ++ c2_brightness_list ++ c2_brightness_list)
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
