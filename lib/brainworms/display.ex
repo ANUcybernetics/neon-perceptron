@@ -72,7 +72,7 @@ defmodule Brainworms.Display do
     :ok
   end
 
-  defp replace_sublist(list, {start_index, length}, new_sublist) do
+  def replace_sublist(list, {start_index, length}, new_sublist) do
     Enum.take(list, start_index) ++
       new_sublist ++
       Enum.drop(list, start_index + length)
