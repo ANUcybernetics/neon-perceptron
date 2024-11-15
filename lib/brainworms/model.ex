@@ -29,8 +29,14 @@ defmodule Brainworms.Model do
   """
   def new(hidden_layer_size) do
     Axon.input("bitlist", shape: {nil, 7})
-    |> Axon.dense(hidden_layer_size, activation: :relu)
-    |> Axon.dense(10, activation: :softmax)
+    # |> Axon.attach_hook(fn val -> IO.inspect(val, label: :seven_segment) end, on: :forward)
+    |> Axon.dense(hidden_layer_size)
+    |> Axon.relu()
+    # |> Axon.attach_hook(fn val -> IO.inspect(val, label: :hidden_activations) end, on: :forward)
+    |> Axon.dense(10)
+    |> Axon.activation(:softmax)
+
+    # |> Axon.attach_hook(fn val -> IO.inspect(val, label: :softmax_outputs) end, on: :forward)
   end
 
   @doc """
@@ -76,14 +82,11 @@ defmodule Brainworms.Model do
   Returns an Axon loop configured with categorical cross-entropy loss,
   the Adam optimizer, and accuracy metrics.
   """
-  def init_loop() do
-    Brainworms.Model.new(2)
+  def train(model, data, opts \\ []) do
+    model
     |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
     |> Axon.Loop.metric(:accuracy, "Accuracy")
-    |> Axon.Loop.handle_event(:epoch_completed, fn state ->
-      # dbg(state.step_state.model_state)
-      {:halt_loop, state}
-    end)
+    |> Axon.Loop.run(data, %{}, opts)
   end
 
   @doc """
@@ -98,5 +101,22 @@ defmodule Brainworms.Model do
   def predict(model, params, digit) do
     input = Utils.digit_to_bitlist!(digit) |> Nx.tensor() |> Nx.new_axis(0)
     Axon.predict(model, params, input)
+  end
+
+  @doc """
+  Run single-shot inference for a trained model and return the most likely digit class.
+
+  Intended use:
+  - `model` comes from `new/1`
+  - `params` comes from `train/4`
+
+  For a given `digit` 0-9, return the predicted digit class (0-9) under `model`.
+  """
+  def predict_class(model, params, digit) do
+    model
+    |> predict(params, digit)
+    |> Nx.argmax(axis: 1)
+    |> Nx.to_flat_list()
+    |> List.first()
   end
 end
