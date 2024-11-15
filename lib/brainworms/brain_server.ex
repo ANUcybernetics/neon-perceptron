@@ -4,8 +4,6 @@ defmodule Brainworms.BrainServer do
   """
   use GenServer
 
-  alias Brainworms.Input.Knob
-
   @display_refresh_interval 10
 
   def start_link(_opts) do
@@ -58,8 +56,7 @@ defmodule Brainworms.BrainServer do
   def handle_info(:demo, state) do
     # Brainworms.Display.Wires.breathe(state.devices.spi)
 
-    digit = Knob.get_position() |> Integer.mod(10)
-    Brainworms.Display.set(state.devices.spi, digit, state.model)
+    Brainworms.Display.demo(state.devices.spi)
 
     Process.send_after(self(), :demo, @display_refresh_interval)
     {:noreply, state}

@@ -4,19 +4,54 @@ defmodule Brainworms.Display do
   """
 
   alias Brainworms.Utils
+  alias Brainworms.Input.Knob
 
-  def set(spi_bus, digit, _model) do
+  @pwm_controller_count 3
+
+  @pin_mapping %{
+    ss: {62, 7},
+    dense_0: {48, 14},
+    dense_1_0: {0, 15},
+    dense_1_1: {24, 15}
+  }
+
+  def demo(spi_bus) do
     # for now, just "breathe" the wires... until we can process the model properly
-    c1_brightness_list = Utils.digit_to_bitlist(digit) ++ List.duplicate(1.0, 17)
+    #
+    # TODO generate a whole batch of breathing-osc data, and then replace_sublist the digit over the top
 
-    c2_brightness_list =
-      Range.new(1, 24)
-      |> Enum.map(fn _ -> 0.5 + 0.5 * Utils.osc(0.2) end)
+    _digit = Knob.get_position() |> Integer.mod(10)
 
     data =
-      Enum.reverse(c1_brightness_list ++ c2_brightness_list ++ c2_brightness_list)
+      Range.new(1, 24 * @pwm_controller_count)
+      |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * (1 + Integer.mod(x, 8))) end)
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
+  end
+
+  def set_all(spi_bus, value) do
+    data =
+      value
+      |> List.duplicate(24 * @pwm_controller_count)
+      |> Utils.pwm_encode()
+
+    Circuits.SPI.transfer!(spi_bus, data)
+    :ok
+  end
+
+  def breathe(spi_bus) do
+    data =
+      Range.new(1, 24 * @pwm_controller_count)
+      |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * (1 + Integer.mod(x, 8))) end)
+      |> Utils.pwm_encode()
+
+    Circuits.SPI.transfer!(spi_bus, data)
+  end
+
+  defp replace_sublist(list, {start_index, length}, new_sublist) do
+    Enum.take(list, start_index) ++
+      new_sublist ++
+      Enum.drop(list, start_index + length)
   end
 end

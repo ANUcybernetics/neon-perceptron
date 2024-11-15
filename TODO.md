@@ -2,6 +2,10 @@
 
 (in no particular order)
 
+- get model training GenServer running
+
+- set knob handler to iterate through the bit patterns
+
 - run Model.init_loop in BrainServer init, and maybe train for one epoch, and
   the :epoch_completed event handler should send the whole model state to the
   BrainServer (perhaps a :model_updated event or something)
