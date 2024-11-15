@@ -23,22 +23,26 @@ defmodule Brainworms.Model do
     training_data = training_set()
 
     # train the model for one epoch, but then halt (and send the :train_epoch message to self to continue training in 100ms)
-    model
-    |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
-    |> Axon.Loop.metric(:accuracy, "Accuracy")
-    |> Axon.Loop.handle_event(:epoch_completed, fn loop_state ->
-      Process.send_after(self(), {:train_epoch, loop_state}, @inter_epoch_sleep)
-      {:halt_loop, loop_state}
-    end)
-    |> Axon.Loop.run(training_data, Axon.ModelState.empty())
+    loop =
+      model
+      |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
+      |> Axon.Loop.metric(:accuracy, "Accuracy")
+      |> Axon.Loop.handle_event(:epoch_completed, fn loop_state ->
+        Process.send_after(self(), {:train_epoch, loop_state}, @inter_epoch_sleep)
+        {:halt_loop, loop_state}
+      end)
 
-    {:ok, %{model: model, training_data: training_data}}
+    Axon.Loop.run(loop, training_data, Axon.ModelState.empty())
+
+    {:ok, %{model: model, training_data: training_data, loop: loop}}
   end
 
   @impl true
   def handle_info({:train_epoch, loop_state}, state) do
     # the attached :epoch_completed handler already fires off a new message to self
-    Axon.Loop.run(loop_state, state.training_data)
+    state.loop
+    |> Axon.Loop.from_state(loop_state)
+    |> Axon.Loop.run(state.training_data)
 
     {:noreply, state}
   end
