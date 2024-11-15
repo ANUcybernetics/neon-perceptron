@@ -94,7 +94,7 @@ defmodule Brainworms.Model do
     model
     |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
     |> Axon.Loop.metric(:accuracy, "Accuracy")
-    |> Axon.Loop.run(data, %{}, opts)
+    |> Axon.Loop.run(data, Axon.ModelState.empty(), opts)
   end
 
   @doc """
