@@ -14,8 +14,24 @@ defmodule Brainworms.ModelTest do
 
     IO.puts("Ok, now for testing the predictions")
 
-    Enum.each(0..9, fn digit ->
-      assert Brainworms.Model.predict_class(model, params, digit) == digit
-    end)
+    errors =
+      0..9
+      |> Enum.map(fn digit ->
+        predicted = Brainworms.Model.predict_class(model, params, digit)
+
+        if predicted != digit do
+          {digit, predicted}
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    if errors != [] do
+      error_messages =
+        Enum.map_join(errors, "\n", fn {expected, actual} ->
+          "Expected #{expected} but got #{actual}"
+        end)
+
+      flunk("Mispredictions found:\n#{error_messages}")
+    end
   end
 end
