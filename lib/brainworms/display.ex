@@ -15,7 +15,7 @@ defmodule Brainworms.Display do
     dense_1_1: {24, 15}
   }
 
-  def demo(spi_bus) do
+  def breathe_demo(spi_bus) do
     # for now, just "breathe" the wires... until we can process the model properly
     #
     # TODO generate a whole batch of breathing-osc data, and then replace_sublist the digit over the top
