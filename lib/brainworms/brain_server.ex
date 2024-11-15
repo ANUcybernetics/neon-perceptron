@@ -24,9 +24,9 @@ defmodule Brainworms.BrainServer do
   def init(:ok) do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
 
-    # give it 1s to start up the first time (although not really needed)
-    Process.send_after(self(), :demo, @display_refresh_interval)
-    # Process.send_after(self(), :update_lights, 1_000)
+    # start the loop running
+    # Process.send_after(self(), :demo, @display_refresh_interval)
+    # Process.send_after(self(), :display, @display_refresh_interval)
 
     {:ok,
      %{
@@ -66,7 +66,7 @@ defmodule Brainworms.BrainServer do
   end
 
   @impl true
-  def handle_info(:update_lights, state) do
+  def handle_info(:display, state) do
     mode =
       if state.mode == :inference and
            DateTime.diff(DateTime.utc_now(), state.last_activity) > 10 do
@@ -76,7 +76,7 @@ defmodule Brainworms.BrainServer do
       end
 
     # finally, schedule the next update
-    Process.send_after(self(), :update_lights, @display_refresh_interval)
+    Process.send_after(self(), :display, @display_refresh_interval)
     {:noreply, %{state | mode: mode}}
   end
 
