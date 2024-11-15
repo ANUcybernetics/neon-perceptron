@@ -30,6 +30,21 @@ defmodule Brainworms.Display do
     Circuits.SPI.transfer!(spi_bus, data)
   end
 
+  @doc """
+  Handles display output through PWM controllers, providing various demo and
+  control functions for LED displays using SPI communication.
+  """
+  def step_demo(spi_bus) do
+    second = System.os_time(:second) |> Integer.mod(24 * @pwm_controller_count)
+
+    data =
+      List.duplicate(1, 24 * @pwm_controller_count)
+      |> List.replace_at(second, 0)
+      |> Utils.pwm_encode()
+
+    Circuits.SPI.transfer!(spi_bus, data)
+  end
+
   def set_all(spi_bus, value) do
     data =
       value
