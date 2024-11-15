@@ -2,31 +2,44 @@ defmodule Brainworms.Input.Knob do
   use GenServer
   alias Circuits.GPIO
 
+  require Logger
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   def init(_opts) do
-    # Open GPIO pins in input mode with pull-up resistors
-    {:ok, pin_a} = GPIO.open("GPIO17", :input)
-    {:ok, pin_b} = GPIO.open("GPIO18", :input)
+    case {GPIO.open("GPIO17", :input), GPIO.open("GPIO18", :input)} do
+      {{:ok, pin_a}, {:ok, pin_b}} ->
+        # Enable interrupts on both edges
+        GPIO.set_interrupts(pin_a, :both)
+        GPIO.set_interrupts(pin_b, :both)
 
-    # Enable interrupts on both edges
-    GPIO.set_interrupts(pin_a, :both)
-    GPIO.set_interrupts(pin_b, :both)
+        # Set pull-up resistors
+        GPIO.set_pull_mode(pin_a, :pullup)
+        GPIO.set_pull_mode(pin_b, :pullup)
 
-    # Set pull-up resistors
-    GPIO.set_pull_mode(pin_a, :pullup)
-    GPIO.set_pull_mode(pin_b, :pullup)
+        {:ok,
+         %{
+           pin_a: pin_a,
+           pin_b: pin_b,
+           previous_a: GPIO.read(pin_a),
+           previous_b: GPIO.read(pin_b),
+           position: 0
+         }}
 
-    {:ok,
-     %{
-       pin_a: pin_a,
-       pin_b: pin_b,
-       previous_a: GPIO.read(pin_a),
-       previous_b: GPIO.read(pin_b),
-       position: 0
-     }}
+      _ ->
+        Logger.warning("Could not initialize GPIO pins for rotary encoder - interrupts disabled")
+
+        {:ok,
+         %{
+           pin_a: nil,
+           pin_b: nil,
+           previous_a: 0,
+           previous_b: 0,
+           position: 0
+         }}
+    end
   end
 
   # Handler for GPIO17 (Pin A)
