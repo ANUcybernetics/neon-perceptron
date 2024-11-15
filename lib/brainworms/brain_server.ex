@@ -55,7 +55,7 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:demo, state) do
-    Brainworms.Display.breathe_demo(state.devices.spi)
+    Display.step_demo(state.devices.spi)
 
     Process.send_after(self(), :demo, @display_refresh_interval)
     {:noreply, state}
