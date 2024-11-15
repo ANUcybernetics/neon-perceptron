@@ -59,7 +59,21 @@ defmodule Brainworms.Utils do
     Enum.find_index(@bitlists, fn bp -> bp == bitlist end)
   end
 
-  def knob_position_to_bitlist(position) when is_integer(position) do
+  @doc """
+  Converts an integer to a 7-bit binary list representation.
+
+  Input position is taken modulo 128 and converted to a list of 0s and 1s,
+  padded to 7 bits total length.
+
+  Useful for driving 7-segment displays, obviously :)
+
+      iex> Brainworms.Utils.integer_to_bitlist(5)
+      [0, 0, 0, 0, 1, 0, 1]
+
+      iex> Brainworms.Utils.integer_to_bitlist(130)
+      [0, 0, 0, 0, 0, 1, 0]
+  """
+  def integer_to_bitlist(position) when is_integer(position) do
     bitlist = position |> Integer.mod(128) |> Integer.digits(2)
     # pad out to 7 bits
     List.duplicate(0, 8 - length(bitlist)) ++ bitlist
