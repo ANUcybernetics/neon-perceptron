@@ -15,6 +15,14 @@ defmodule Brainworms.Display do
     dense_1_1: {24, 15}
   }
 
+  @doc """
+  Demonstrates breathing effect on LED display by applying oscillating PWM values.
+  Takes current knob position as input to determine digit (currently ignored),
+  then applies a breathing pattern across all other controllers.
+
+  Params:
+    spi_bus: The SPI bus instance for communication with PWM controllers
+  """
   def breathe_demo(spi_bus) do
     # for now, just "breathe" the wires... until we can process the model properly
     #
@@ -31,8 +39,10 @@ defmodule Brainworms.Display do
   end
 
   @doc """
-  Handles display output through PWM controllers, providing various demo and
-  control functions for LED displays using SPI communication.
+  Demonstrates a step pattern by moving a single off LED around the display.
+
+  Params:
+    spi_bus: The SPI bus instance for communication with PWM controllers
   """
   def step_demo(spi_bus) do
     second = System.os_time(:second) |> Integer.mod(24 * @pwm_controller_count)
@@ -45,6 +55,13 @@ defmodule Brainworms.Display do
     Circuits.SPI.transfer!(spi_bus, data)
   end
 
+  @doc """
+  Sets all PWM channels to a specified value.
+
+  Params:
+    spi_bus: The SPI bus instance for communication with PWM controllers
+    value: Value to set all PWM channels to between 0 and 1
+  """
   def set_all(spi_bus, value) do
     data =
       value
@@ -53,15 +70,6 @@ defmodule Brainworms.Display do
 
     Circuits.SPI.transfer!(spi_bus, data)
     :ok
-  end
-
-  def breathe(spi_bus) do
-    data =
-      Range.new(1, 24 * @pwm_controller_count)
-      |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * (1 + Integer.mod(x, 8))) end)
-      |> Utils.pwm_encode()
-
-    Circuits.SPI.transfer!(spi_bus, data)
   end
 
   defp replace_sublist(list, {start_index, length}, new_sublist) do

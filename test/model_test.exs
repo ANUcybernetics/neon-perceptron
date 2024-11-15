@@ -34,4 +34,17 @@ defmodule Brainworms.ModelTest do
       flunk("Mispredictions found:\n#{error_messages}")
     end
   end
+
+  test "model halting" do
+    model = Brainworms.Model.new(2)
+    training_data = Brainworms.Model.training_set()
+
+    model
+    |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
+    |> Axon.Loop.metric(:accuracy, "Accuracy")
+    |> Axon.Loop.handle_event(:epoch_completed, fn loop_state ->
+      {:halt_loop, loop_state}
+    end)
+    |> Axon.Loop.run(training_data, Axon.ModelState.empty())
+  end
 end
