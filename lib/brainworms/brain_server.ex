@@ -12,7 +12,7 @@ defmodule Brainworms.BrainServer do
 
   @type state :: %{
           mode: :inference | :training,
-          model: Axon.t(),
+          model_state: Axon.ModelState.t(),
           last_activity: DateTime.t(),
           devices: %{spi: reference()}
         }
@@ -29,7 +29,7 @@ defmodule Brainworms.BrainServer do
     {:ok,
      %{
        mode: :inference,
-       model: Brainworms.Model.new(4),
+       model_state: Axon.ModelState.empty(),
        last_activity: DateTime.utc_now(),
        devices: %{spi: spi}
      }}
@@ -42,8 +42,9 @@ defmodule Brainworms.BrainServer do
   end
 
   @impl true
-  def handle_call(:get_state, _from, state) do
-    {:reply, state, state}
+  def handle_call({:set_model_state, model_state}, _from, state) do
+    # reset model state
+    {:reply, :ok, %{state | model_state: model_state}}
   end
 
   @impl true
@@ -77,7 +78,7 @@ defmodule Brainworms.BrainServer do
 
   ## client api
 
-  def get_state do
-    GenServer.call(__MODULE__, :get_state)
+  def set_model_state(model_state) do
+    GenServer.call(__MODULE__, {:set_model_state, model_state})
   end
 end

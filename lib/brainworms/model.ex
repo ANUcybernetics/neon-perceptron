@@ -1,5 +1,6 @@
 defmodule Brainworms.Model do
   use GenServer
+  alias Brainworms.BrainServer
   alias Brainworms.Utils
 
   @moduledoc """
@@ -29,6 +30,7 @@ defmodule Brainworms.Model do
       |> Axon.Loop.metric(:accuracy, "Accuracy")
       |> Axon.Loop.handle_event(:epoch_completed, fn loop_state ->
         Process.send_after(self(), {:train_epoch, loop_state}, @inter_epoch_sleep)
+        BrainServer.set_model_state(loop_state.step_state.model_state)
         {:halt_loop, loop_state}
       end)
 
