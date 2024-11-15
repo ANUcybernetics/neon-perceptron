@@ -4,7 +4,7 @@ defmodule Brainworms.ModelTest do
   test "end-to-end test" do
     model = Brainworms.Model.new(2)
     training_data = Brainworms.Model.training_set()
-    params = Brainworms.Model.train(model, training_data, epochs: 10000)
+    params = Brainworms.Model.train(model, training_data, epochs: 1000)
 
     dense_0_sum = Map.get(params, :data)["dense_0"]["kernel"] |> Nx.sum()
     dense_1_sum = Map.get(params, :data)["dense_1"]["kernel"] |> Nx.sum()
