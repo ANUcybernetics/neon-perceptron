@@ -12,7 +12,9 @@ defmodule Brainworms.Display do
     ss: {62, 7},
     dense_0: {48, 14},
     dense_1_0: {0, 15},
-    dense_1_1: {24, 15}
+    dense_1_1: {24, 15},
+    h_1: {15, 1},
+    h_2: {39, 1}
   }
 
   @doc """
