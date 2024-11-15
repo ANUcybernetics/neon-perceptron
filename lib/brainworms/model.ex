@@ -26,7 +26,7 @@ defmodule Brainworms.Model do
     # train the model for one epoch, but then halt (and send the :train_epoch message to self to continue training in 100ms)
     loop =
       model
-      |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
+      |> Axon.Loop.trainer(:categorical_cross_entropy, :adam, log: 0)
       |> Axon.Loop.metric(:accuracy, "Accuracy")
       |> Axon.Loop.handle_event(:epoch_completed, fn loop_state ->
         Process.send_after(self(), {:train_epoch, loop_state}, @inter_epoch_sleep)
