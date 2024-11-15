@@ -17,6 +17,18 @@ defmodule Brainworms.Display do
     h_2: {39, 1}
   }
 
+  def set(spi_bus, seven_segment, _model_state) do
+    data =
+      Range.new(1, 24 * @pwm_controller_count)
+      |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * (1 + Integer.mod(x, 17))) end)
+      |> replace_sublist(@pin_mapping.ss, seven_segment)
+      |> Utils.pwm_encode()
+
+    # TODO need to light the wires based on model_state
+
+    Circuits.SPI.transfer!(spi_bus, data)
+  end
+
   @doc """
   Demonstrates breathing effect on LED display by applying oscillating PWM values.
   Takes current knob position as input to determine digit (currently ignored),
