@@ -1,29 +1,27 @@
 # TODO
 
-(in no particular order)
+- complete the transition of Model to a genserver, use Loop.train_step, and make
+  a `get_activations` call to get the activations
 
-- get model training GenServer running
+- have just one of the Knob interrupts send a "updated" message to the main
+  brainserver to update `:updated_at`
 
-- set knob handler to iterate through the bit patterns
+- create an `Input` struct, which stores the current display bit pattern plus a
+  list of freq/phase tuples so that if it's in "drift" mode (> 30s since last
+  knob movement) then each bit will be sinusoidally modulated but in a way that
+  each digit "starts" from the last known knob-set bit pattern
 
-- run Model.init_loop in BrainServer init, and maybe train for one epoch, and
-  the :epoch_completed event handler should send the whole model state to the
-  BrainServer (perhaps a :model_updated event or something)
+- activations could normalise (perhaps by layer)
 
-       Model.init_loop |> Axon.Loop.run(Model.training_set())
+- set knob handler to iterate through the bit patterns (basically just do a mod
+  128 on the current return value)
 
-- for lighting the wires, you can pull the model state from
-  loop.step_state.model_state, and then run predict_fn perhaps? or do it
-  manually (e.g. to get the activations of the different wires... not sure if
-  there's a nice way to do this)
-
-- rotary encoder using <https://hexdocs.pm/rotary_encoder/RotaryEncoder.html>
-  (see if changes are necessary for circuits v2)
-- moar tests
+- then, the main loop should:
+  - check update_at
+  - display either the current bit pattern or the current "drift values"
+  - based on display, get the activations from the model and display them too
+  - (maybe) add one more level of modulation, but perhaps not
 
 ## maybe... but not necessarily
 
 - add "wiggle back and forth" detection for reset training?
-- get EXLA compiling (or download pre-built binary)
-- add a UI (for the rpi4 touchscreen) with
-  [Scenic](https://hexdocs.pm/scenic/welcome.html)
