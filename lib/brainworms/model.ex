@@ -27,7 +27,14 @@ defmodule Brainworms.Model do
 
     schedule_training_step()
 
-    {:ok, %{model: model, training_data: training_data, step_fn: step_fn, step_state: step_state}}
+    {:ok,
+     %{
+       model: model,
+       training_data: training_data,
+       init_fn: init_fn,
+       step_fn: step_fn,
+       step_state: step_state
+     }}
   end
 
   @impl true
@@ -48,6 +55,12 @@ defmodule Brainworms.Model do
       |> Enum.map(fn tensor -> Nx.to_flat_list(tensor) end)
 
     {:reply, activations, state}
+  end
+
+  @impl true
+  def handle_call(:reset, _from, state) do
+    step_state = state.init_fn.(state.training_data, Axon.ModelState.empty())
+    {:reply, :ok, %{state | step_state: step_state}}
   end
 
   @impl true
@@ -175,6 +188,10 @@ defmodule Brainworms.Model do
   """
   def activations(input) do
     GenServer.call(__MODULE__, {:activations, input})
+  end
+
+  def reset do
+    GenServer.call(__MODULE__, :reset)
   end
 
   defp schedule_training_step() do

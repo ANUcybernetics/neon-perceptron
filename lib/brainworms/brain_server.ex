@@ -47,12 +47,6 @@ defmodule Brainworms.BrainServer do
   end
 
   @impl true
-  def handle_call(:reset, _from, state) do
-    # reset model state
-    {:reply, :ok, state}
-  end
-
-  @impl true
   def handle_info(:demo, state) do
     Display.step_demo(state.devices.spi)
 
