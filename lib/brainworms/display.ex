@@ -31,22 +31,19 @@ defmodule Brainworms.Display do
 
   @doc """
   Demonstrates breathing effect on LED display by applying oscillating PWM values.
-  Takes current knob position as input to determine digit (currently ignored),
+  Takes current knob position as input to determine seven segment display pattern,
   then applies a breathing pattern across all other controllers.
 
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
   """
   def breathe_demo(spi_bus) do
-    # for now, just "breathe" the wires... until we can process the model properly
-    #
-    # TODO generate a whole batch of breathing-osc data, and then replace_sublist the digit over the top
-
-    _digit = Knob.bitlist() |> Integer.mod(10)
+    seven_segment = Knob.bitlist()
 
     data =
       Range.new(1, 24 * @pwm_controller_count)
-      |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * (1 + Integer.mod(x, 8))) end)
+      |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * 0.5 * Integer.mod(x, 19)) end)
+      |> replace_sublist(@pin_mapping.ss, seven_segment)
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
