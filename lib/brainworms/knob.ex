@@ -1,5 +1,6 @@
-defmodule Brainworms.Input.Knob do
+defmodule Brainworms.Knob do
   use GenServer
+  alias Brainworms.BrainServer
   alias Circuits.GPIO
 
   require Logger
@@ -53,6 +54,8 @@ defmodule Brainworms.Input.Knob do
         state.position
       )
 
+    BrainServer.touch_updated_at()
+
     {:noreply, %{state | previous_a: value, position: new_position}}
   end
 
@@ -93,14 +96,18 @@ defmodule Brainworms.Input.Knob do
     end
   end
 
-  # Get current position
-  def get_position do
-    GenServer.call(__MODULE__, :get_position)
+  def handle_call(:bitlist, _from, state) do
+    # normalise (i.e. remove the factor of 4 inherent to rotary encoders)
+    # and turn into a bitlist
+    bitlist =
+      state.position
+      |> div(4)
+      |> Brainworms.Utils.integer_to_bitlist()
+
+    {:reply, bitlist, state}
   end
 
-  def handle_call(:get_position, _from, state) do
-    # normalise (i.e. remove the factor of 4 inherent to rotary encoders)
-    position = div(state.position, 4)
-    {:reply, position, state}
+  def bitlist do
+    GenServer.call(__MODULE__, :bitlist)
   end
 end

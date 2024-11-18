@@ -4,7 +4,7 @@ defmodule Brainworms.Display do
   """
 
   alias Brainworms.Utils
-  alias Brainworms.Input.Knob
+  alias Brainworms.Knob
 
   @pwm_controller_count 3
 
@@ -42,7 +42,7 @@ defmodule Brainworms.Display do
     #
     # TODO generate a whole batch of breathing-osc data, and then replace_sublist the digit over the top
 
-    _digit = Knob.get_position() |> Integer.mod(10)
+    _digit = Knob.bitlist() |> Integer.mod(10)
 
     data =
       Range.new(1, 24 * @pwm_controller_count)

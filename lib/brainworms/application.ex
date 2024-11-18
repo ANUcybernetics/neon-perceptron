@@ -9,16 +9,17 @@ defmodule Brainworms.Application do
   def start(_type, _args) do
     children =
       [
-        # Children for all targets
-        # Starts a worker by calling: Brainworms.Worker.start_link(arg)
+        # Knob starts first
+        Brainworms.Knob,
+        # BrainServer starts after Knob
         Brainworms.BrainServer,
-        Brainworms.Input.Knob,
+        # Model starts after BrainServer
         Brainworms.Model
       ] ++ target_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Brainworms.Supervisor]
+    opts = [strategy: :rest_for_one, name: Brainworms.Supervisor]
     Supervisor.start_link(children, opts)
   end
 

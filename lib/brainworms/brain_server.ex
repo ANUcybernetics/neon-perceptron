@@ -4,6 +4,9 @@ defmodule Brainworms.BrainServer do
   """
   use GenServer
 
+  alias Brainworms.Display
+  alias Brainworms.Knob
+
   @display_refresh_interval 10
 
   def start_link(_opts) do
@@ -12,8 +15,7 @@ defmodule Brainworms.BrainServer do
 
   @type state :: %{
           mode: :inference | :training,
-          model_state: Axon.ModelState.t(),
-          last_activity: DateTime.t(),
+          updated_at: DateTime.t(),
           devices: %{spi: reference()}
         }
 
@@ -22,15 +24,13 @@ defmodule Brainworms.BrainServer do
   def init(:ok) do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
 
-    # start the loop running
     # Process.send_after(self(), :demo, @display_refresh_interval)
     # Process.send_after(self(), :display, @display_refresh_interval)
 
     {:ok,
      %{
        mode: :inference,
-       model_state: Axon.ModelState.empty(),
-       last_activity: DateTime.utc_now(),
+       updated_at: DateTime.utc_now(),
        devices: %{spi: spi}
      }}
   end
@@ -42,9 +42,8 @@ defmodule Brainworms.BrainServer do
   end
 
   @impl true
-  def handle_call({:set_model_state, model_state}, _from, state) do
-    # reset model state
-    {:reply, :ok, %{state | model_state: model_state}}
+  def handle_call(:touch_updated_at, _from, state) do
+    {:reply, :ok, %{state | updated_at: DateTime.utc_now()}}
   end
 
   @impl true
@@ -63,22 +62,25 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:display, state) do
-    mode =
-      if state.mode == :inference and
-           DateTime.diff(DateTime.utc_now(), state.last_activity) > 10 do
-        :training
-      else
-        state.mode
-      end
+    seven_segment = Knob.bitlist()
+
+    Display.set(state.devices.spi, seven_segment, %{})
+
+    # mode =
+    #   if state.mode == :inference and
+    #        DateTime.diff(DateTime.utc_now(), state.updated_at) > 10 do
+    #     :training
+    #   else
+    #     state.mode
+    #   end
 
     # finally, schedule the next update
     Process.send_after(self(), :display, @display_refresh_interval)
-    {:noreply, %{state | mode: mode}}
+    {:noreply, state}
   end
 
   ## client api
-
-  def set_model_state(model_state) do
-    GenServer.call(__MODULE__, {:set_model_state, model_state})
+  def touch_updated_at do
+    GenServer.call(__MODULE__, :touch_updated_at)
   end
 end

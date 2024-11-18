@@ -1,6 +1,5 @@
 defmodule Brainworms.Model do
   use GenServer
-  alias Brainworms.BrainServer
   alias Brainworms.Utils
 
   @moduledoc """
@@ -12,7 +11,7 @@ defmodule Brainworms.Model do
   how they work.
   """
 
-  @inter_epoch_sleep 100
+  @training_sleep_interval 100
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -20,37 +19,46 @@ defmodule Brainworms.Model do
 
   @impl true
   def init(_opts) do
+    # initialise model & training state
     model = new(2)
     training_data = training_set()
+    {init_fn, step_fn} = Axon.Loop.train_step(model, :categorical_cross_entropy, :adam)
+    step_state = init_fn.(training_data, Axon.ModelState.empty())
 
-    # train the model for one epoch, but then halt (and send the :train_epoch message to self to continue training in 100ms)
-    loop =
-      model
-      |> Axon.Loop.trainer(:categorical_cross_entropy, :adam, log: 0)
-      |> Axon.Loop.metric(:accuracy, "Accuracy")
-      |> Axon.Loop.handle_event(:epoch_completed, fn loop_state ->
-        Process.send_after(self(), {:train_epoch, loop_state}, @inter_epoch_sleep)
-        BrainServer.set_model_state(loop_state.step_state.model_state)
-        {:halt_loop, loop_state}
-      end)
+    schedule_training_step()
 
-    Axon.Loop.run(loop, training_data, Axon.ModelState.empty())
-
-    {:ok, %{model: model, training_data: training_data, loop: loop}}
+    {:ok, %{model: model, training_data: training_data, step_fn: step_fn, step_state: step_state}}
   end
 
   @impl true
-  def handle_info({:train_epoch, loop_state}, state) do
-    # the attached :epoch_completed handler already fires off a new message to self
-    state.loop
-    |> Axon.Loop.from_state(loop_state)
-    |> Axon.Loop.run(state.training_data)
+  def handle_call({:activations, input}, _from, state) do
+    weights = Map.get(state.step_state.model_state, :data)
+    %{"dense_0" => %{"kernel" => kernel_0}, "dense_1" => %{"kernel" => kernel_1}} = weights
 
-    {:noreply, state}
+    dense_layers = [kernel_0, kernel_1]
+    input_vector = Nx.tensor(input, type: :f32)
+
+    activations =
+      Enum.reduce(dense_layers, {input_vector, []}, fn layer, {current_input, outputs} ->
+        intermediate = current_input |> Nx.new_axis(1) |> Nx.multiply(layer)
+        result = Nx.sum(intermediate, axes: [0])
+        {result, outputs ++ [intermediate, result]}
+      end)
+      |> elem(1)
+      |> Enum.map(fn tensor -> Nx.to_flat_list(tensor) end)
+
+    {:reply, activations, state}
+  end
+
+  @impl true
+  def handle_info(:train_step, state) do
+    step_state = state.step_fn.(state.training_data, state.step_state)
+    schedule_training_step()
+    {:noreply, %{state | step_state: step_state}}
   end
 
   @doc """
-  Create a fully-connected model
+  Create a fully-connected multi-layer perceptron model
 
   The model will have a 7-dimensional input (each one corresponding to a segment in the
   display) and a 10-dimensional output (for the softmax predictions; one for each digit 0-9).
@@ -109,11 +117,13 @@ defmodule Brainworms.Model do
       |> Nx.new_axis(-1, :one_hot)
       |> Nx.equal(Nx.tensor(Enum.to_list(0..9)))
 
-    Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
+    {inputs, targets}
+
+    # Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
   end
 
   @doc """
-  Creates a loop for training the model.
+  Train a model on the given data.
 
   Returns an Axon loop configured with categorical cross-entropy loss,
   the Adam optimizer, and accuracy metrics.
@@ -163,19 +173,11 @@ defmodule Brainworms.Model do
 
   Used to map neural network calculations to wire brightness values for visualization.
   """
-  def activations(model_state, input) do
-    weights = Map.get(model_state, :data)
-    %{"dense_0" => %{"kernel" => kernel_0}, "dense_1" => %{"kernel" => kernel_1}} = weights
+  def activations(input) do
+    GenServer.call(__MODULE__, {:activations, input})
+  end
 
-    dense_layers = [kernel_0, kernel_1]
-    input_vector = Nx.tensor(input, type: :f32)
-
-    Enum.reduce(dense_layers, {input_vector, []}, fn layer, {current_input, outputs} ->
-      intermediate = current_input |> Nx.new_axis(1) |> Nx.multiply(layer)
-      result = Nx.sum(intermediate, axes: [0])
-      {result, outputs ++ [intermediate, result]}
-    end)
-    |> elem(1)
-    |> Enum.flat_map(fn tensor -> Nx.to_list(tensor) end)
+  defp schedule_training_step() do
+    Process.send_after(self(), :train_step, @training_sleep_interval)
   end
 end
