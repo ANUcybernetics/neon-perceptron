@@ -58,6 +58,16 @@ defmodule Brainworms.Model do
   end
 
   @impl true
+  def handle_call({:predict, input}, _from, state) do
+    batched_input = input |> Nx.tensor() |> Nx.new_axis(0)
+
+    prediction =
+      Axon.predict(state.model, state.step_state.model_state, batched_input) |> Nx.to_flat_list()
+
+    {:reply, prediction, state}
+  end
+
+  @impl true
   def handle_call(:reset, _from, state) do
     step_state = state.init_fn.(state.training_data, Axon.ModelState.empty())
     {:reply, :ok, %{state | step_state: step_state}}
@@ -188,6 +198,10 @@ defmodule Brainworms.Model do
   """
   def activations(input) do
     GenServer.call(__MODULE__, {:activations, input})
+  end
+
+  def predict(input) do
+    GenServer.call(__MODULE__, {:predict, input})
   end
 
   def reset do
