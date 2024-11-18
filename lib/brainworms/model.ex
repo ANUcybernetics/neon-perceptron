@@ -68,6 +68,11 @@ defmodule Brainworms.Model do
   end
 
   @impl true
+  def handle_call(:iteration, _from, state) do
+    {:reply, state.step_state.i, state}
+  end
+
+  @impl true
   def handle_call(:reset, _from, state) do
     step_state = state.init_fn.(state.training_data, Axon.ModelState.empty())
     {:reply, :ok, %{state | step_state: step_state}}
@@ -202,6 +207,10 @@ defmodule Brainworms.Model do
 
   def predict(input) do
     GenServer.call(__MODULE__, {:predict, input})
+  end
+
+  def iteration() do
+    GenServer.call(__MODULE__, :iteration)
   end
 
   def reset do
