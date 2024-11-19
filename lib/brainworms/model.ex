@@ -183,6 +183,8 @@ defmodule Brainworms.Model do
   computations and final activations during inference. The list includes
   element-wise multiplications and summed results for each layer, in order.
 
+  The returned activations are scaled (layer-wise) to the range [0, 1] for visualization purposes.
+
   This is hard-coded to the structure of the model created by `new/1`---a fully-connected
   network with one hidden layer (ReLU activation) and a softmax output layer. There might be a
   nicer and more general way to get this info out of Axon (e.g. `Axon.build/2` with `print_values: true`
@@ -217,7 +219,19 @@ defmodule Brainworms.Model do
       activations_dense_1,
       softmax_0
     ]
-    |> Enum.map(fn tensor -> Nx.to_flat_list(tensor) end)
+    |> Enum.map(fn tensor ->
+      min = Nx.reduce_min(tensor) |> Nx.to_number()
+      max = Nx.reduce_max(tensor) |> Nx.to_number()
+
+      if max == min do
+        tensor |> Nx.to_flat_list()
+      else
+        tensor
+        |> Nx.subtract(min)
+        |> Nx.divide(max - min)
+        |> Nx.to_flat_list()
+      end
+    end)
   end
 
   def activations(input) do
