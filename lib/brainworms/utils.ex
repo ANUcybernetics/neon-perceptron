@@ -105,6 +105,20 @@ defmodule Brainworms.Utils do
   end
 
   @doc """
+  Get the current system time as a float value in seconds.
+
+  This function returns the current system time in nanoseconds as a floating-point
+  value, divided by 1.0e9 to convert to seconds.
+
+  Example:
+      iex> Brainworms.Utils.float_now()
+      1641234567.123456  # Value will vary based on current time
+  """
+  def float_now() do
+    :os.system_time(:nanosecond) / 1.0e9
+  end
+
+  @doc """
   Generate a sine wave oscillator value at the current time.
 
   Takes a frequency in Hz and an optional phase offset in radians.
@@ -114,7 +128,7 @@ defmodule Brainworms.Utils do
       iex> Brainworms.Utils.osc(1.0)  # Generate 1Hz sine wave
       0.5  # Value will vary based on current time
   """
-  def osc(frequency, phase \\ 0.0, t \\ :os.system_time(:nanosecond) / 1.0e9) do
+  def osc(frequency, phase \\ 0.0, t \\ float_now()) do
     :math.sin(2 * :math.pi() * (t * frequency + phase))
   end
 
