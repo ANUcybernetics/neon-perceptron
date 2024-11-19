@@ -27,7 +27,8 @@ defmodule Brainworms.Knob do
            pin_b: pin_b,
            previous_a: GPIO.read(pin_a),
            previous_b: GPIO.read(pin_b),
-           position: 0
+           # start at 126, which is the digit "0"
+           position: 126
          }}
 
       _ ->
