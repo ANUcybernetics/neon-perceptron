@@ -60,7 +60,7 @@ defmodule Brainworms.BrainServer do
     seven_segment = Knob.bitlist()
     activations = Model.activations(seven_segment)
 
-    Display.set(state.devices.spi, seven_segment, activations)
+    Display.set(state.devices.spi, activations)
 
     # mode =
     #   if state.mode == :inference and
