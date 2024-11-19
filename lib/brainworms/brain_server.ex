@@ -23,7 +23,7 @@ defmodule Brainworms.BrainServer do
           mode: :inference | :training,
           updated_at: DateTime.t(),
           drift_osc_params: [{float(), float()}],
-          devices: %{spi: reference()}
+          devices: %{spi: %Circuits.SPI.SPIDev{}}
         }
 
   @spec init(:ok) :: {:ok, state()}
