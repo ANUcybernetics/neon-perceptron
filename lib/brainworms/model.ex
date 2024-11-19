@@ -39,21 +39,7 @@ defmodule Brainworms.Model do
 
   @impl true
   def handle_call({:activations, input}, _from, state) do
-    weights = Map.get(state.step_state.model_state, :data)
-    %{"dense_0" => %{"kernel" => kernel_0}, "dense_1" => %{"kernel" => kernel_1}} = weights
-
-    dense_layers = [kernel_0, kernel_1]
-    input_vector = Nx.tensor(input, type: :f32)
-
-    activations =
-      Enum.reduce(dense_layers, {input_vector, []}, fn layer, {current_input, outputs} ->
-        intermediate = current_input |> Nx.new_axis(1) |> Nx.multiply(layer)
-        result = Nx.sum(intermediate, axes: [0])
-        {result, outputs ++ [intermediate, result]}
-      end)
-      |> elem(1)
-      |> Enum.map(fn tensor -> Nx.to_flat_list(tensor) end)
-
+    activations = activations_from_model_state(state.step_state.model_state, input)
     {:reply, activations, state}
   end
 
@@ -193,12 +179,47 @@ defmodule Brainworms.Model do
   end
 
   @doc """
-  Takes the current model state and (bitlist) input and returns a list of the intermediate
+  Takes the current model state and a bitlist input and returns a list of the intermediate
   computations and final activations during inference. The list includes
   element-wise multiplications and summed results for each layer, in order.
 
+  This is hard-coded to the structure of the model created by `new/1`---a fully-connected
+  network with one hidden layer (ReLU activation) and a softmax output layer. There might be a
+  nicer and more general way to get this info out of Axon (e.g. `Axon.build/2` with `print_values: true`
+  will print some of the right values) but I haven't found it yet.
+
   Used to map neural network calculations to wire brightness values for visualization.
   """
+  def activations_from_model_state(model_state, input) do
+    weights = Map.get(model_state, :data)
+
+    %{
+      "dense_0" => %{"bias" => _bias_0, "kernel" => kernel_0},
+      "dense_1" => %{"bias" => _bias_1, "kernel" => kernel_1}
+    } = weights
+
+    input_vector = Nx.tensor(input, type: :f32)
+
+    activations_dense_0 =
+      input_vector |> Nx.new_axis(1) |> Nx.multiply(kernel_0)
+
+    relu_0 = activations_dense_0 |> Nx.sum(axes: [0]) |> Axon.Activations.relu()
+
+    activations_dense_1 =
+      relu_0 |> Nx.new_axis(1) |> Nx.multiply(kernel_1)
+
+    softmax_0 = activations_dense_1 |> Nx.sum(axes: [0]) |> Axon.Activations.softmax()
+
+    [
+      input_vector,
+      activations_dense_0,
+      relu_0,
+      activations_dense_1,
+      softmax_0
+    ]
+    |> Enum.map(fn tensor -> Nx.to_flat_list(tensor) end)
+  end
+
   def activations(input) do
     GenServer.call(__MODULE__, {:activations, input})
   end
