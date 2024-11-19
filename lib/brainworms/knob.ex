@@ -9,6 +9,7 @@ defmodule Brainworms.Knob do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @impl true
   def init(_opts) do
     case {GPIO.open("GPIO17", :input), GPIO.open("GPIO18", :input)} do
       {{:ok, pin_a}, {:ok, pin_b}} ->
@@ -44,6 +45,7 @@ defmodule Brainworms.Knob do
   end
 
   # Handler for GPIO17 (Pin A)
+  @impl true
   def handle_info({:circuits_gpio, "GPIO17", _timestamp, value}, state) do
     new_position =
       determine_direction(
@@ -60,6 +62,7 @@ defmodule Brainworms.Knob do
   end
 
   # Handler for GPIO18 (Pin B)
+  @impl true
   def handle_info({:circuits_gpio, "GPIO18", _timestamp, value}, state) do
     new_position =
       determine_direction(
@@ -96,6 +99,7 @@ defmodule Brainworms.Knob do
     end
   end
 
+  @impl true
   def handle_call(:bitlist, _from, state) do
     # normalise (i.e. remove the factor of 4 inherent to rotary encoders)
     # and turn into a bitlist
