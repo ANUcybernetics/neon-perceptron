@@ -20,7 +20,7 @@ defmodule Brainworms.Display do
 
   def set(spi_bus, activations) do
     # pull out the easy ones
-    [input, dense_0, [relu_0a, relu_0b], dense_1, softmax_0] = activations
+    [input, dense_0, [relu_0a, relu_0b], dense_1, softmax_0] = scale_activations(activations)
 
     {dense_1_and_output_a, dense_1_and_output_b} =
       dense_1
@@ -101,5 +101,30 @@ defmodule Brainworms.Display do
     Enum.take(list, start_index) ++
       new_sublist ++
       Enum.drop(list, start_index + length(list))
+  end
+
+  def scale_activations(activations) do
+    [input, dense_0, relu_0, dense_1, softmax_0] = activations
+
+    [
+      input,
+      scale_to_0_1(dense_0),
+      # scale the ReLU units (which will always be > 0) to approach 1 as they get large
+      Enum.map(relu_0, fn x -> x / (1 + x) end),
+      scale_to_0_1(dense_1),
+      softmax_0
+    ]
+  end
+
+  defp scale_to_0_1(brightness_list) do
+    min_value = Enum.min(brightness_list)
+    max_value = Enum.max(brightness_list)
+    range = max_value - min_value
+
+    if range == 0 do
+      List.duplicate(0, length(brightness_list))
+    else
+      Enum.map(brightness_list, fn x -> (x - min_value) / range end)
+    end
   end
 end
