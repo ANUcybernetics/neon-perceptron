@@ -219,19 +219,7 @@ defmodule Brainworms.Model do
       activations_dense_1,
       softmax_0
     ]
-    |> Enum.map(fn tensor ->
-      min = Nx.reduce_min(tensor) |> Nx.to_number()
-      max = Nx.reduce_max(tensor) |> Nx.to_number()
-
-      if max == min do
-        tensor |> Nx.to_flat_list()
-      else
-        tensor
-        |> Nx.subtract(min)
-        |> Nx.divide(max - min)
-        |> Nx.to_flat_list()
-      end
-    end)
+    |> Enum.map(&Nx.to_flat_list/1)
   end
 
   def activations(input) do
