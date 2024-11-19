@@ -127,21 +127,21 @@ defmodule Brainworms.Model do
       iex> train_data = Brainworms.Train.inputs()
       iex> train_data[[digit: 0]]
       #Nx.Tensor<
-        u8[bitlist: 7]
-        [1, 1, 1, 0, 1, 1, 1]
+        f32[bitlist: 7]
+        [1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0]
       >
   """
   def training_set() do
     inputs =
       0..9
       |> Enum.map(&Utils.digit_to_bitlist/1)
-      |> Nx.tensor(names: [:digit, :bitlist], type: :u8)
+      |> Nx.tensor(names: [:digit, :bitlist], type: :f32)
 
     # a tensor of the (one-hot-encoded) digits 0-9 (one per row).
     targets =
       0..9
       |> Enum.to_list()
-      |> Nx.tensor(type: :u8, names: [:digit])
+      |> Nx.tensor(type: :f32, names: [:digit])
       |> Nx.new_axis(-1, :one_hot)
       |> Nx.equal(Nx.tensor(Enum.to_list(0..9)))
 
