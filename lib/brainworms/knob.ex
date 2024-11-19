@@ -111,7 +111,23 @@ defmodule Brainworms.Knob do
     {:reply, bitlist, state}
   end
 
+  @impl true
+  def handle_call(:digit, _from, state) do
+    # normalise (i.e. remove the factor of 4 inherent to rotary encoders)
+    # and turn into a bitlist
+    digit_bitlist =
+      state.position
+      |> rem(10)
+      |> Brainworms.Utils.digit_to_bitlist()
+
+    {:reply, digit_bitlist, state}
+  end
+
   def bitlist do
     GenServer.call(__MODULE__, :bitlist)
+  end
+
+  def digit do
+    GenServer.call(__MODULE__, :digit)
   end
 end
