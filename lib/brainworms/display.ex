@@ -20,7 +20,8 @@ defmodule Brainworms.Display do
 
   def set(spi_bus, activations) do
     # pull out the easy ones
-    [input, dense_0, [relu_0a, relu_0b], dense_1, softmax_0] = scale_activations(activations)
+    [seven_segment, dense_0, [relu_0a, relu_0b], dense_1, softmax_0] =
+      scale_activations(activations)
 
     {dense_1_and_output_a, dense_1_and_output_b} =
       dense_1

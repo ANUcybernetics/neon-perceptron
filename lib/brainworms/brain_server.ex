@@ -9,7 +9,11 @@ defmodule Brainworms.BrainServer do
   alias Brainworms.Model
   alias Brainworms.Utils
 
+  # this is in ms
   @display_refresh_interval 10
+
+  # this is in seconds
+  @drift_delay 10
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
@@ -18,7 +22,7 @@ defmodule Brainworms.BrainServer do
   @type state :: %{
           mode: :inference | :training,
           updated_at: DateTime.t(),
-          segment_phase: [integer()],
+          drift_osc_params: [{float(), float()}],
           devices: %{spi: reference()}
         }
 
@@ -34,7 +38,7 @@ defmodule Brainworms.BrainServer do
      %{
        mode: :inference,
        updated_at: DateTime.utc_now(),
-       segment_phase: List.duplicate({0, 0}, 7),
+       drift_osc_params: List.duplicate({0, 0}, 7),
        devices: %{spi: spi}
      }}
   end
@@ -47,17 +51,8 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_call(:touch_updated_at, _from, state) do
-    t = :os.system_time(:nanosecond) / 1.0e9
-
-    # calculate the phases for the 7 segments so that when they start to "drift"
-    # it's easy to make them drift from their current value (0 or 1)
-    segment_phase =
-      0..6
-      # a small spread of frequencies, all very breathy
-      |> Enum.map(fn x -> 0.3 + 0.0723 * x end)
-      |> Enum.map(fn freq -> {freq, :math.fmod(t, 2 + :math.pi() * freq)} end)
-
-    {:reply, :ok, %{state | updated_at: DateTime.utc_now(), segment_phase: segment_phase}}
+    drift_osc_params = calculate_drift_osc_params(Utils.float_now() + @drift_delay)
+    {:reply, :ok, %{state | updated_at: DateTime.utc_now(), drift_osc_params: drift_osc_params}}
   end
 
   @impl true
@@ -70,20 +65,17 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:display, state) do
-    knob = Knob.bitlist()
+    knob_bitlist = Knob.bitlist()
 
     seven_segment =
-      if DateTime.diff(DateTime.utc_now(), state.updated_at) < 10 do
-        knob
+      if DateTime.diff(DateTime.utc_now(), state.updated_at) < @drift_delay do
+        knob_bitlist
       else
-        t = :os.system_time(:nanosecond) / 1.0e9
-
-        knob
-        |> Enum.map(&(&1 * (:math.pi() / 2)))
-        |> Enum.zip(state.segment_phase)
-        |> Enum.map(fn {phase_offset, {freq, phase}} ->
-          Utils.osc(freq, phase + phase_offset, t) |> abs()
-        end)
+        seven_segment_brightness_with_drift(
+          knob_bitlist,
+          state.drift_osc_params,
+          Utils.float_now()
+        )
       end
 
     activations = Model.activations(seven_segment)
@@ -98,5 +90,26 @@ defmodule Brainworms.BrainServer do
   ## client api
   def touch_updated_at do
     GenServer.call(__MODULE__, :touch_updated_at)
+  end
+
+  defp calculate_drift_osc_params(drift_start_time) do
+    # calculate the phases for the 7 segments so that when they start to "drift"
+    # it's easy to make them drift from their current value (0 or 1)
+    0..6
+    # a small spread of frequencies, all very "breathy" (i.e. around 0.5Hz)
+    |> Enum.map(fn x -> 0.3 + 0.0723 * x end)
+    |> Enum.map(fn freq -> {freq, :math.fmod(drift_start_time, 2 + :math.pi() * freq)} end)
+  end
+
+  defp seven_segment_brightness_with_drift(bitlist, drift_osc_params, t) do
+    bitlist
+    # add pi/2 for all the "high" bits so they start from 1, otherwise 0
+    |> Enum.map(&(&1 * (:math.pi() / 2)))
+    # zip with the already-calculated freq/phases for each segment
+    |> Enum.zip(drift_osc_params)
+    # calculate the brightness for each segment (abs(), because it needs to be in [0, 1])
+    |> Enum.map(fn {phase_offset, {freq, phase}} ->
+      Utils.osc(freq, phase + phase_offset, t) |> abs()
+    end)
   end
 end
