@@ -6,6 +6,7 @@ defmodule Brainworms.BrainServer do
 
   alias Brainworms.Display
   alias Brainworms.Knob
+  alias Brainworms.Model
 
   @display_refresh_interval 10
 
@@ -57,8 +58,9 @@ defmodule Brainworms.BrainServer do
   @impl true
   def handle_info(:display, state) do
     seven_segment = Knob.bitlist()
+    activations = Model.activations(seven_segment)
 
-    Display.set(state.devices.spi, seven_segment, %{})
+    Display.set(state.devices.spi, seven_segment, activations)
 
     # mode =
     #   if state.mode == :inference and

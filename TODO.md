@@ -1,5 +1,9 @@
 # TODO
 
+- apply the relu and softmax steps
+
+- batch/layer norm?
+
 - create an `Input` struct, which stores the current display bit pattern plus a
   list of freq/phase tuples so that if it's in "drift" mode (> 30s since last
   knob movement) then each bit will be sinusoidally modulated but in a way that

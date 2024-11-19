@@ -146,8 +146,6 @@ defmodule Brainworms.Model do
       |> Nx.equal(Nx.tensor(Enum.to_list(0..9)))
 
     {inputs, targets}
-
-    # Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
   end
 
   @doc """

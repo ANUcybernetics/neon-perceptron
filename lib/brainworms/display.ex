@@ -9,20 +9,34 @@ defmodule Brainworms.Display do
   @pwm_controller_count 3
 
   @pin_mapping %{
-    ss: {62, 7},
-    dense_0: {48, 14},
-    dense_1_0: {0, 15},
-    dense_1_1: {24, 15},
-    h_1: {15, 1},
-    h_2: {39, 1}
+    ss: 62,
+    dense_0: 48,
+    # dense_1 is split into two parts, and the layer weights & final outputs are interleaved
+    dense_1_and_output_b0: 0,
+    dense_1_and_output_b1: 24,
+    hidden_0: 15,
+    hidden_1: 39
   }
 
-  def set(spi_bus, seven_segment, _model_state) do
+  def set(spi_bus, seven_segment, activations) do
+    # pull out the easy ones
+    [dense_0, [hidden_0, hidden_1], dense_1, output] = activations
+
+    {dense_1_and_output_b0, dense_1_and_output_b1} =
+      dense_1
+      |> Enum.chunk_every(2)
+      |> Enum.zip_with(output, fn weights, output -> weights ++ [output] end)
+      |> List.flatten()
+      |> Enum.split(15)
+
     data =
-      Range.new(1, 24 * @pwm_controller_count)
-      |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * (1 + Integer.mod(x, 17))) end)
+      List.duplicate(0, 24 * @pwm_controller_count)
       |> replace_sublist(@pin_mapping.ss, seven_segment)
-      |> Utils.pwm_encode()
+      |> replace_sublist(@pin_mapping.dense_0, dense_0)
+      |> replace_sublist(@pin_mapping.dense_1_and_output_b0, dense_1_and_output_b0)
+      |> replace_sublist(@pin_mapping.dense_1_and_output_b1, dense_1_and_output_b1)
+      |> replace_sublist(@pin_mapping.hidden_0, hidden_0)
+      |> replace_sublist(@pin_mapping.hidden_1, hidden_1)
 
     # TODO need to light the wires based on model_state
 
@@ -83,9 +97,9 @@ defmodule Brainworms.Display do
     :ok
   end
 
-  def replace_sublist(list, {start_index, length}, new_sublist) do
+  def replace_sublist(list, start_index, new_sublist) do
     Enum.take(list, start_index) ++
       new_sublist ++
-      Enum.drop(list, start_index + length)
+      Enum.drop(list, start_index + length(list))
   end
 end
