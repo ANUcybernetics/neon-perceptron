@@ -114,9 +114,7 @@ defmodule Brainworms.Utils do
       iex> Brainworms.Utils.osc(1.0)  # Generate 1Hz sine wave
       0.5  # Value will vary based on current time
   """
-  def osc(frequency, phase \\ 0.0) do
-    t = :os.system_time(:nanosecond) / 1.0e9
-
+  def osc(frequency, phase \\ 0.0, t \\ :os.system_time(:nanosecond) / 1.0e9) do
     :math.sin(2 * :math.pi() * (t * frequency + phase))
   end
 

@@ -7,6 +7,7 @@ defmodule Brainworms.BrainServer do
   alias Brainworms.Display
   alias Brainworms.Knob
   alias Brainworms.Model
+  alias Brainworms.Utils
 
   @display_refresh_interval 10
 
@@ -17,6 +18,7 @@ defmodule Brainworms.BrainServer do
   @type state :: %{
           mode: :inference | :training,
           updated_at: DateTime.t(),
+          segment_phase: [integer()],
           devices: %{spi: reference()}
         }
 
@@ -32,6 +34,7 @@ defmodule Brainworms.BrainServer do
      %{
        mode: :inference,
        updated_at: DateTime.utc_now(),
+       segment_phase: List.duplicate(0, 7),
        devices: %{spi: spi}
      }}
   end
@@ -44,7 +47,17 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_call(:touch_updated_at, _from, state) do
-    {:reply, :ok, %{state | updated_at: DateTime.utc_now()}}
+    t = :os.system_time(:nanosecond) / 1.0e9
+
+    # calculate the phases for the 7 segments so that when they start to "drift"
+    # it's easy to make them drift from their current value (0 or 1)
+    segment_phase =
+      0..6
+      # a small spread of frequencies, all very breathy
+      |> Enum.map(fn x -> 0.3 + 0.0723 * x end)
+      |> Enum.map(fn freq -> {freq, :math.fmod(t, 2 + :math.pi() * freq)} end)
+
+    {:reply, :ok, %{state | updated_at: DateTime.utc_now(), segment_phase: segment_phase}}
   end
 
   @impl true
@@ -57,18 +70,25 @@ defmodule Brainworms.BrainServer do
 
   @impl true
   def handle_info(:display, state) do
-    seven_segment = Knob.bitlist()
+    knob = Knob.bitlist()
+
+    seven_segment =
+      if DateTime.diff(DateTime.utc_now(), state.updated_at) < 10 do
+        knob
+      else
+        t = :os.system_time(:nanosecond) / 1.0e9
+
+        knob
+        |> Enum.map(&(&1 * (:math.pi() / 2)))
+        |> Enum.zip(state.segment_phase)
+        |> Enum.map(fn {phase_offset, {freq, phase}} ->
+          Utils.osc(freq, phase + phase_offset, t) |> abs()
+        end)
+      end
+
     activations = Model.activations(seven_segment)
 
     Display.set(state.devices.spi, activations)
-
-    # mode =
-    #   if state.mode == :inference and
-    #        DateTime.diff(DateTime.utc_now(), state.updated_at) > 10 do
-    #     :training
-    #   else
-    #     state.mode
-    #   end
 
     # finally, schedule the next update
     Process.send_after(self(), :display, @display_refresh_interval)
