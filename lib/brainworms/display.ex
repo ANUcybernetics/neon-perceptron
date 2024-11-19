@@ -35,10 +35,9 @@ defmodule Brainworms.Display do
       |> replace_sublist(@pin_mapping.dense_0, dense_0)
       |> replace_sublist(@pin_mapping.dense_1_and_output_a, dense_1_and_output_a)
       |> replace_sublist(@pin_mapping.dense_1_and_output_b, dense_1_and_output_b)
-      |> replace_sublist(@pin_mapping.relu_0a, relu_0a)
-      |> replace_sublist(@pin_mapping.relu_0b, relu_0b)
-
-    # TODO need to light the wires based on model_state
+      |> replace_sublist(@pin_mapping.relu_0a, [relu_0a])
+      |> replace_sublist(@pin_mapping.relu_0b, [relu_0b])
+      |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
   end
@@ -100,7 +99,7 @@ defmodule Brainworms.Display do
   def replace_sublist(list, start_index, new_sublist) do
     Enum.take(list, start_index) ++
       new_sublist ++
-      Enum.drop(list, start_index + length(list))
+      Enum.drop(list, start_index + length(new_sublist))
   end
 
   def scale_activations(activations) do

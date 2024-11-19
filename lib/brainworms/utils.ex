@@ -76,7 +76,7 @@ defmodule Brainworms.Utils do
   def integer_to_bitlist(position) when is_integer(position) do
     bitlist = position |> Integer.mod(128) |> Integer.digits(2)
     # pad out to 7 bits
-    List.duplicate(0, 8 - length(bitlist)) ++ bitlist
+    List.duplicate(0, 7 - length(bitlist)) ++ bitlist
   end
 
   @doc """

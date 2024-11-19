@@ -28,13 +28,13 @@ defmodule Brainworms.BrainServer do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
 
     # Process.send_after(self(), :demo, @display_refresh_interval)
-    # Process.send_after(self(), :display, @display_refresh_interval)
+    Process.send_after(self(), :display, @display_refresh_interval)
 
     {:ok,
      %{
        mode: :inference,
        updated_at: DateTime.utc_now(),
-       segment_phase: List.duplicate(0, 7),
+       segment_phase: List.duplicate({0, 0}, 7),
        devices: %{spi: spi}
      }}
   end
