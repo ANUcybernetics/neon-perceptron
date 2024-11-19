@@ -31,7 +31,7 @@ defmodule Brainworms.Display do
 
     data =
       List.duplicate(0, 24 * @pwm_controller_count)
-      |> replace_sublist(@pin_mapping.ss, input)
+      |> replace_sublist(@pin_mapping.ss, Enum.reverse(seven_segment))
       |> replace_sublist(@pin_mapping.dense_0, dense_0)
       |> replace_sublist(@pin_mapping.dense_1_and_output_a, dense_1_and_output_a)
       |> replace_sublist(@pin_mapping.dense_1_and_output_b, dense_1_and_output_b)
@@ -56,7 +56,7 @@ defmodule Brainworms.Display do
     data =
       Range.new(1, 24 * @pwm_controller_count)
       |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * 0.5 * Integer.mod(x, 19)) end)
-      |> replace_sublist(@pin_mapping.ss, seven_segment)
+      |> replace_sublist(@pin_mapping.ss, Enum.reverse(seven_segment))
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
