@@ -92,7 +92,7 @@ defmodule Brainworms.BrainServer do
     GenServer.call(__MODULE__, :touch_updated_at)
   end
 
-  defp calculate_drift_osc_params(drift_start_time) do
+  def calculate_drift_osc_params(drift_start_time) do
     # calculate the phases for the 7 segments so that when they start to "drift"
     # it's easy to make them drift from their current value (0 or 1)
     0..6
@@ -101,7 +101,7 @@ defmodule Brainworms.BrainServer do
     |> Enum.map(fn freq -> {freq, :math.fmod(drift_start_time, 2 + :math.pi() * freq)} end)
   end
 
-  defp seven_segment_brightness_with_drift(bitlist, drift_osc_params, t) do
+  def seven_segment_brightness_with_drift(bitlist, drift_osc_params, t) do
     bitlist
     # add pi/2 for all the "high" bits so they start from 1, otherwise 0
     |> Enum.map(&(&1 * (:math.pi() / 2)))
