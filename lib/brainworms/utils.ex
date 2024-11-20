@@ -62,7 +62,7 @@ defmodule Brainworms.Utils do
   @doc """
   Converts an integer to a 7-bit binary list representation.
 
-  Input position is taken modulo 128 and converted to a list of 0s and 1s,
+  Input value is taken modulo 128 and converted to a list of 0s and 1s,
   padded to 7 bits total length.
 
   Useful for driving 7-segment displays, obviously :)
@@ -73,8 +73,8 @@ defmodule Brainworms.Utils do
       iex> Brainworms.Utils.integer_to_bitlist(130)
       [0, 0, 0, 0, 0, 1, 0]
   """
-  def integer_to_bitlist(position) when is_integer(position) do
-    bitlist = position |> Integer.mod(128) |> Integer.digits(2)
+  def integer_to_bitlist(value) when is_integer(value) do
+    bitlist = value |> Integer.mod(128) |> Integer.digits(2)
     # pad out to 7 bits
     List.duplicate(0, 7 - length(bitlist)) ++ bitlist
   end
