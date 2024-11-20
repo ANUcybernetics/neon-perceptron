@@ -1,5 +1,4 @@
 defmodule Brainworms.ModelTest do
-  alias Brainworms.Utils
   use ExUnit.Case
 
   test "end-to-end test" do

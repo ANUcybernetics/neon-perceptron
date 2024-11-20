@@ -1,7 +1,5 @@
 defmodule Brainworms.Knob do
   use GenServer
-  alias Brainworms.BrainServer
-  alias Brainworms.Utils
   alias Circuits.GPIO
 
   require Logger
@@ -28,8 +26,8 @@ defmodule Brainworms.Knob do
            pin_b: pin_b,
            previous_a: GPIO.read(pin_a),
            previous_b: GPIO.read(pin_b),
-           # start at 504 (= 126 * 4), which makes Knob.bitlist return the digit "0" initially
-           position: 504
+           # start at 4 (SSD shows "A" only at startup)
+           position: 4
          }}
 
       _ ->
@@ -57,8 +55,6 @@ defmodule Brainworms.Knob do
         state.previous_b,
         state.position
       )
-
-    # BrainServer.touch_updated_at()
 
     {:noreply, %{state | previous_a: value, position: new_position}}
   end
@@ -102,35 +98,12 @@ defmodule Brainworms.Knob do
   end
 
   @impl true
-  def handle_call(:bitlist, _from, state) do
+  def handle_call(:position, _from, state) do
     # normalise (i.e. remove the factor of 4 inherent to rotary encoders)
-    # and turn into a bitlist
-    bitlist =
-      state.position
-      |> div(4)
-      |> Utils.integer_to_bitlist()
-
-    {:reply, bitlist, state}
+    {:reply, div(state.position, 4), state}
   end
 
-  @impl true
-  def handle_call(:digit, _from, state) do
-    # normalise (i.e. remove the factor of 4 inherent to rotary encoders)
-    # and turn into a bitlist
-    digit_bitlist =
-      state.position
-      |> div(4)
-      |> Integer.mod(10)
-      |> Utils.digit_to_bitlist()
-
-    {:reply, digit_bitlist, state}
-  end
-
-  def bitlist do
-    GenServer.call(__MODULE__, :bitlist)
-  end
-
-  def digit do
-    GenServer.call(__MODULE__, :digit)
+  def position do
+    GenServer.call(__MODULE__, :position)
   end
 end

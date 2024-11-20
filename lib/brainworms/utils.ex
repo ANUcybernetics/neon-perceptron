@@ -132,6 +132,27 @@ defmodule Brainworms.Utils do
     :math.sin(2 * :math.pi() * (t * frequency + phase))
   end
 
+  def calculate_drift_params(drift_start_time) do
+    # calculate the phases for the 7 segments so that when they start to "drift"
+    # it's easy to make them drift from their current value (0 or 1)
+    0..6
+    # a small spread of frequencies, all very "breathy" (i.e. around 0.5Hz)
+    |> Enum.map(fn x -> 0.3 + 0.0723 * x end)
+    |> Enum.map(fn freq -> {freq, :math.fmod(drift_start_time, 2 + :math.pi() * freq)} end)
+  end
+
+  def apply_drift(bitlist, drift_params, t) do
+    bitlist
+    # add pi/2 for all the "high" bits so they start from 1, otherwise 0
+    |> Enum.map(&(&1 * (:math.pi() / 2)))
+    # zip with the already-calculated freq/phases for each segment
+    |> Enum.zip(drift_params)
+    # calculate the brightness for each segment (abs(), because it needs to be in [0, 1])
+    |> Enum.map(fn {phase_offset, {freq, phase}} ->
+      osc(freq, phase + phase_offset, t) |> abs()
+    end)
+  end
+
   defp gamma_correction(value) do
     gamma = 2.8
     :math.pow(value, gamma)

@@ -4,7 +4,6 @@ defmodule Brainworms.Display do
   """
 
   alias Brainworms.Utils
-  alias Brainworms.Knob
 
   @pwm_controller_count 3
 
@@ -53,9 +52,7 @@ defmodule Brainworms.Display do
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
   """
-  def breathe_demo(spi_bus) do
-    seven_segment = Knob.bitlist()
-
+  def breathe_demo(spi_bus, seven_segment) do
     data =
       Range.new(1, 24 * @pwm_controller_count)
       |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * 0.5 * Integer.mod(x, 19)) end)
