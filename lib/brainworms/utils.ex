@@ -137,7 +137,7 @@ defmodule Brainworms.Utils do
     # it's easy to make them drift from their current value (0 or 1)
     0..6
     # a small spread of frequencies, all very "breathy" (i.e. around 0.5Hz)
-    |> Enum.map(fn x -> 0.3 + 0.0723 * x end)
+    |> Enum.map(fn x -> 0.05 + 0.01723 * x end)
     |> Enum.map(fn freq -> {freq, :math.fmod(drift_start_time, 2 + :math.pi() * freq)} end)
   end
 
