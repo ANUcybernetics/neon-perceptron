@@ -102,7 +102,7 @@ defmodule Brainworms.BrainServer do
     if seven_segment == state.seven_segment do
       state
     else
-      drift_at = DateTime.utc_now() |> DateTime.add(@drift_delay)
+      drift_at = DateTime.utc_now() |> DateTime.add(@drift_delay, :second)
       drift_params = Utils.calculate_drift_params(Utils.float_now())
 
       %{state | seven_segment: seven_segment, drift_at: drift_at, drift_params: drift_params}
