@@ -32,12 +32,14 @@ defmodule Brainworms.Display do
 
     data =
       List.duplicate(0, 24 * @pwm_controller_count)
-      |> replace_sublist(@pin_mapping.ss, Enum.reverse(seven_segment))
+      |> replace_sublist(@pin_mapping.ss, seven_segment)
       |> replace_sublist(@pin_mapping.dense_0, dense_0)
       |> replace_sublist(@pin_mapping.dense_1_and_output_a, dense_1_and_output_a)
       |> replace_sublist(@pin_mapping.dense_1_and_output_b, dense_1_and_output_b)
       |> replace_sublist(@pin_mapping.relu_0a, [relu_0a])
       |> replace_sublist(@pin_mapping.relu_0b, [relu_0b])
+      # it's a big'ol shift register, so we need to send the bits in reverse
+      |> Enum.reverse()
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
@@ -57,7 +59,9 @@ defmodule Brainworms.Display do
     data =
       Range.new(1, 24 * @pwm_controller_count)
       |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * 0.5 * Integer.mod(x, 19)) end)
-      |> replace_sublist(@pin_mapping.ss, Enum.reverse(seven_segment))
+      |> replace_sublist(@pin_mapping.ss, seven_segment)
+      # it's a big'ol shift register, so we need to send the bits in reverse
+      |> Enum.reverse()
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
@@ -75,6 +79,27 @@ defmodule Brainworms.Display do
     data =
       List.duplicate(1, 24 * @pwm_controller_count)
       |> List.replace_at(second, 0)
+      # it's a big'ol shift register, so we need to send the bits in reverse
+      |> Enum.reverse()
+      |> Utils.pwm_encode()
+
+    Circuits.SPI.transfer!(spi_bus, data)
+  end
+
+  @doc """
+  Sets a single PWM channel to a specified value.
+
+  Params:
+    spi_bus: The SPI bus instance for communication with PWM controllers
+    index: Index of the PWM channel to set (0-71)
+    value: Value to set the PWM channel to between 0 and 1
+  """
+  def set_one(spi_bus, index, value) do
+    data =
+      List.duplicate(0, 24 * @pwm_controller_count)
+      |> List.replace_at(index, value)
+      # it's a big'ol shift register, so we need to send the bits in reverse
+      |> Enum.reverse()
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
