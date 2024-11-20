@@ -28,8 +28,8 @@ defmodule Brainworms.Knob do
            pin_b: pin_b,
            previous_a: GPIO.read(pin_a),
            previous_b: GPIO.read(pin_b),
-           # start at 126, which is the digit "0"
-           position: 126
+           # start at 504 (= 126 * 4), which makes Knob.bitlist return the digit "0" initially
+           position: 504
          }}
 
       _ ->
@@ -58,7 +58,7 @@ defmodule Brainworms.Knob do
         state.position
       )
 
-    BrainServer.touch_updated_at()
+    # BrainServer.touch_updated_at()
 
     {:noreply, %{state | previous_a: value, position: new_position}}
   end
