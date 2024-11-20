@@ -61,7 +61,7 @@ defmodule Brainworms.BrainServer do
 
     Display.breathe_demo(state.devices.spi, knob_bitlist)
 
-    Process.send_after(self(), :demo, @display_refresh_interval)
+    Process.send_after(self(), :display, @display_refresh_interval)
     {:noreply, update_seven_segment(state, knob_bitlist)}
   end
 
