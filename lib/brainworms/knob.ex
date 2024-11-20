@@ -1,6 +1,7 @@
 defmodule Brainworms.Knob do
   use GenServer
   alias Brainworms.BrainServer
+  alias Brainworms.Utils
   alias Circuits.GPIO
 
   require Logger
@@ -107,7 +108,7 @@ defmodule Brainworms.Knob do
     bitlist =
       state.position
       |> div(4)
-      |> Brainworms.Utils.integer_to_bitlist()
+      |> Utils.integer_to_bitlist()
 
     {:reply, bitlist, state}
   end
@@ -118,9 +119,9 @@ defmodule Brainworms.Knob do
     # and turn into a bitlist
     digit_bitlist =
       state.position
-      |> Brainworms.Utils.digit_to_bitlist()
       |> div(4)
       |> Integer.mod(10)
+      |> Utils.digit_to_bitlist()
 
     {:reply, digit_bitlist, state}
   end
