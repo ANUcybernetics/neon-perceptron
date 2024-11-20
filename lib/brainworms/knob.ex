@@ -118,8 +118,9 @@ defmodule Brainworms.Knob do
     # and turn into a bitlist
     digit_bitlist =
       state.position
-      |> rem(10)
       |> Brainworms.Utils.digit_to_bitlist()
+      |> div(4)
+      |> Integer.mod(10)
 
     {:reply, digit_bitlist, state}
   end
