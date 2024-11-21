@@ -92,7 +92,7 @@ defmodule Brainworms.Model do
   def new(hidden_layer_size) do
     Axon.input("bitlist", shape: {nil, 7})
     |> Axon.dense(hidden_layer_size)
-    |> Axon.relu()
+    |> Axon.tanh()
     |> Axon.dense(10)
     |> Axon.activation(:softmax)
   end
@@ -205,7 +205,7 @@ defmodule Brainworms.Model do
     activations_dense_0 =
       input_vector |> Nx.new_axis(1) |> Nx.multiply(kernel_0)
 
-    relu_0 = activations_dense_0 |> Nx.sum(axes: [0]) |> Axon.Activations.relu()
+    relu_0 = activations_dense_0 |> Nx.sum(axes: [0]) |> Axon.Activations.tanh()
 
     activations_dense_1 =
       relu_0 |> Nx.new_axis(1) |> Nx.multiply(kernel_1)
