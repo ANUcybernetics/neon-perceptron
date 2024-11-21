@@ -5,7 +5,7 @@ defmodule Brainworms.ModelTest do
     model = Brainworms.Model.new(2)
     {inputs, targets} = Brainworms.Model.training_set()
     training_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
-    params = Brainworms.Model.train(model, training_data, epochs: 1000)
+    params = Brainworms.Model.train(model, training_data, epochs: 10_000)
 
     dense_0_sum = Map.get(params, :data)["dense_0"]["kernel"] |> Nx.sum()
     dense_1_sum = Map.get(params, :data)["dense_1"]["kernel"] |> Nx.sum()
