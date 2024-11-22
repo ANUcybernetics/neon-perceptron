@@ -74,7 +74,7 @@ defmodule Brainworms.ModelTest do
     step_state = init_fn.(training_set, Axon.ModelState.empty())
 
     step_state =
-      Enum.reduce(1..num_epochs, step_state, fn idx, acc ->
+      Enum.reduce(1..(3 * num_epochs), step_state, fn idx, acc ->
         if rem(idx, 1000) == 0 do
           IO.puts("Training step #{idx} completed")
         end
