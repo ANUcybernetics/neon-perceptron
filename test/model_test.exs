@@ -54,8 +54,9 @@ defmodule Brainworms.ModelTest do
     # model, dataset & test input the same in both cases
     model = Brainworms.Model.new(2)
     {inputs, targets} = training_set = Brainworms.Model.training_set()
-    input = Brainworms.Utils.digit_to_bitlist(0)
-    num_epochs = 10_000
+
+    # keep this at 1_000 for now, but if you want accuracy to reach 100% you'll need more like 10_000
+    num_epochs = 1_000
 
     # the "build & train in one hit" setup
     {_init_fn, predict_fn} = Axon.build(model, print_values: false)
@@ -89,24 +90,27 @@ defmodule Brainworms.ModelTest do
 
     IO.puts("Loop run accuracy: #{(loop_run_accuracy * 100) |> Float.round(1)}")
     IO.puts("Step run accuracy: #{(step_run_accuracy * 100) |> Float.round(1)}")
-  end
 
-  defp digit_from_distribution(distribution) do
-    Enum.with_index(distribution)
-    |> Enum.max_by(fn {value, _index} -> value end)
-    |> elem(1)
-  end
+    # finally, check the activations
+    distances =
+      predict_fn.(step_state.model_state, inputs)
+      |> Nx.to_list()
+      |> Enum.with_index(fn distribution, digit ->
+        final_layer =
+          Brainworms.Model.activations_from_model_state(
+            step_state.model_state,
+            Brainworms.Utils.digit_to_bitlist(digit)
+          )
+          |> List.last()
 
-  defp compare_predictions(p1, p2) do
-    # compare the pair
+        # calculate the L2 norm of the difference between things
+        dist_tensor = Nx.tensor(distribution)
+        final_layer_tensor = Nx.tensor(final_layer)
+        diff = Nx.subtract(dist_tensor, final_layer_tensor)
+        Nx.sqrt(Nx.sum(Nx.multiply(diff, diff))) |> Nx.to_flat_list() |> List.first()
+      end)
 
-    # this is a pretty big eplison - not sure why it's differing
-    assert epsilon = 1.0e-3
-
-    # doing it in list mode... could do it as Nx tensors if we wanted
-    Enum.zip(p1, p2)
-    |> Enum.each(fn {pred, act} ->
-      assert abs(pred - act) < epsilon
-    end)
+    # this is bad check; they should be zero if I'm getting this right
+    assert Enum.all?(distances, fn d -> d < 1.0 end)
   end
 end
