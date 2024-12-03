@@ -242,7 +242,7 @@ defmodule Brainworms.Model do
     Axon.Losses.categorical_cross_entropy(step_state.y_true, step_state.y_pred)
     |> Nx.to_list()
     |> Enum.with_index()
-    |> Enum.map(fn {loss, i} -> "#{i}: #{Float.round(loss, 2)}" end)
+    |> Enum.map(fn {loss, i} -> "#{i}/#{Float.round(loss, 2)}" end)
     |> Enum.join("  ")
     |> then(&"Loss: #{&1}")
     |> IO.puts()
