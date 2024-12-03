@@ -13,13 +13,13 @@ defmodule Brainworms.Display do
     # dense_1 is split into two parts, and the layer weights & final softmax outputs are interleaved
     dense_1_and_output_a: 0,
     dense_1_and_output_b: 24,
-    relu_0a: 15,
-    relu_0b: 39
+    hidden_0a: 15,
+    hidden_0b: 39
   }
 
   def set(spi_bus, activations) do
     # pull out the easy ones
-    [seven_segment, dense_0, [relu_0a, relu_0b], dense_1, softmax_0] =
+    [seven_segment, dense_0, [hidden_0a, hidden_0b], dense_1, softmax_0] =
       scale_activations(activations)
 
     {dense_1_and_output_a, dense_1_and_output_b} =
@@ -35,8 +35,8 @@ defmodule Brainworms.Display do
       |> replace_sublist(@pin_mapping.dense_0, dense_0)
       |> replace_sublist(@pin_mapping.dense_1_and_output_a, dense_1_and_output_a)
       |> replace_sublist(@pin_mapping.dense_1_and_output_b, dense_1_and_output_b)
-      |> replace_sublist(@pin_mapping.relu_0a, [relu_0a])
-      |> replace_sublist(@pin_mapping.relu_0b, [relu_0b])
+      |> replace_sublist(@pin_mapping.hidden_0a, [hidden_0a])
+      |> replace_sublist(@pin_mapping.hidden_0b, [hidden_0b])
       # it's a big'ol shift register, so we need to send the bits in reverse
       |> Enum.reverse()
       |> Utils.pwm_encode()
@@ -57,6 +57,32 @@ defmodule Brainworms.Display do
       Range.new(1, 24 * @pwm_controller_count)
       |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * 0.5 * Integer.mod(x, 19)) end)
       |> replace_sublist(@pin_mapping.ss, seven_segment)
+      # it's a big'ol shift register, so we need to send the bits in reverse
+      |> Enum.reverse()
+      |> Utils.pwm_encode()
+
+    Circuits.SPI.transfer!(spi_bus, data)
+  end
+
+  @doc """
+  Show a demo by flashing through the layers of the network.
+
+  Params:
+    spi_bus: The SPI bus instance for communication with PWM controllers
+  """
+  def layer_demo(spi_bus) do
+    layer = System.os_time(:second) |> Integer.mod(6)
+    zeroes = List.duplicate(0, 24 * @pwm_controller_count)
+
+    data =
+      case layer do
+        0 -> replace_sublist(zeroes, @pin_mapping.ss, List.duplicate(1, 7))
+        1 -> replace_sublist(zeroes, @pin_mapping.dense_0, List.duplicate(1, 14))
+        2 -> replace_sublist(zeroes, @pin_mapping.hidden_0a, [1])
+        3 -> replace_sublist(zeroes, @pin_mapping.hidden_0b, [1])
+        4 -> replace_sublist(zeroes, @pin_mapping.dense_1_and_output_a, List.duplicate(1, 15))
+        5 -> replace_sublist(zeroes, @pin_mapping.dense_1_and_output_b, List.duplicate(1, 15))
+      end
       # it's a big'ol shift register, so we need to send the bits in reverse
       |> Enum.reverse()
       |> Utils.pwm_encode()
@@ -126,13 +152,13 @@ defmodule Brainworms.Display do
   end
 
   def scale_activations(activations) do
-    [input, dense_0, relu_0, dense_1, softmax_0] = activations
+    [input, dense_0, hidden_0, dense_1, softmax_0] = activations
 
     [
       input,
       scale_to_0_1(dense_0),
       # scale the ReLU units (which will always be > 0) to approach 1 as they get large
-      Enum.map(relu_0, fn x -> x / (1 + x) end),
+      Enum.map(hidden_0, fn x -> x / (1 + x) end),
       scale_to_0_1(dense_1),
       softmax_0
     ]
