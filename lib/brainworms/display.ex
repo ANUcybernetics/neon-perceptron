@@ -71,17 +71,26 @@ defmodule Brainworms.Display do
     spi_bus: The SPI bus instance for communication with PWM controllers
   """
   def layer_demo(spi_bus) do
-    layer = System.os_time(:second) |> Integer.mod(6)
+    layer = System.os_time(:second) |> Integer.mod(4)
     zeroes = List.duplicate(0, 24 * @pwm_controller_count)
 
     data =
       case layer do
-        0 -> replace_sublist(zeroes, @pin_mapping.ss, List.duplicate(1, 7))
-        1 -> replace_sublist(zeroes, @pin_mapping.dense_0, List.duplicate(1, 14))
-        2 -> replace_sublist(zeroes, @pin_mapping.hidden_0a, [1])
-        3 -> replace_sublist(zeroes, @pin_mapping.hidden_0b, [1])
-        4 -> replace_sublist(zeroes, @pin_mapping.dense_1_and_output_a, List.duplicate(1, 15))
-        5 -> replace_sublist(zeroes, @pin_mapping.dense_1_and_output_b, List.duplicate(1, 15))
+        0 ->
+          replace_sublist(zeroes, @pin_mapping.ss, List.duplicate(1, 7))
+
+        1 ->
+          replace_sublist(zeroes, @pin_mapping.dense_0, List.duplicate(1, 14))
+
+        2 ->
+          zeroes
+          |> replace_sublist(@pin_mapping.hidden_0a, [1])
+          |> replace_sublist(@pin_mapping.hidden_0b, [1])
+
+        3 ->
+          zeroes
+          |> replace_sublist(@pin_mapping.dense_1_and_output_a, List.duplicate(1, 15))
+          |> replace_sublist(@pin_mapping.dense_1_and_output_b, List.duplicate(1, 15))
       end
       # it's a big'ol shift register, so we need to send the bits in reverse
       |> Enum.reverse()
