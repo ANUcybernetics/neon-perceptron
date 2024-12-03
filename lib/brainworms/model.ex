@@ -233,6 +233,7 @@ defmodule Brainworms.Model do
     input = List.duplicate(1, 7)
 
     [input, dense_0, hidden_0, dense_1, softmax_0] =
+      activations =
       activations_from_model_state(step_state.model_state, input)
 
     IO.puts("\nIteration: #{Nx.to_number(step_state.i)}")
@@ -253,23 +254,29 @@ defmodule Brainworms.Model do
     |> IO.puts()
 
     IO.puts(
-      "Input: min=#{Float.round(Enum.min(input), 2)}, max=#{Float.round(Enum.max(input), 2)}"
+      "  Input: min=#{Float.round(Enum.min(input), 2)}, max=#{Float.round(Enum.max(input), 2)}"
     )
 
     IO.puts(
-      "Dense 0: min=#{Float.round(Enum.min(dense_0), 2)}, max=#{Float.round(Enum.max(dense_0), 2)}"
+      "  Dense 0: min=#{Float.round(Enum.min(dense_0), 2)}, max=#{Float.round(Enum.max(dense_0), 2)}"
     )
 
     IO.puts(
-      "Hidden 0: min=#{Float.round(Enum.min(hidden_0), 2)}, max=#{Float.round(Enum.max(hidden_0), 2)}"
+      "  Hidden 0: min=#{Float.round(Enum.min(hidden_0), 2)}, max=#{Float.round(Enum.max(hidden_0), 2)}"
     )
 
     IO.puts(
-      "Dense 1: min=#{Float.round(Enum.min(dense_1), 2)}, max=#{Float.round(Enum.max(dense_1), 2)}"
+      "  Dense 1: min=#{Float.round(Enum.min(dense_1), 2)}, max=#{Float.round(Enum.max(dense_1), 2)}"
     )
 
     IO.puts(
-      "Softmax 0: min=#{Float.round(Enum.min(softmax_0), 2)}, max=#{Float.round(Enum.max(softmax_0), 2)}"
+      "  Softmax 0: min=#{Float.round(Enum.min(softmax_0), 2)}, max=#{Float.round(Enum.max(softmax_0), 2)}"
+    )
+
+    activations = List.flatten(activations)
+
+    IO.puts(
+      "  Overall: min=#{Float.round(Enum.min(activations), 2)}, max=#{Float.round(Enum.max(activations), 2)}"
     )
   end
 
