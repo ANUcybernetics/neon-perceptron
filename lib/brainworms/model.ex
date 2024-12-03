@@ -101,6 +101,7 @@ defmodule Brainworms.Model do
     |> Axon.dense(hidden_layer_size)
     |> Axon.tanh()
     |> Axon.dense(10)
+    |> Axon.layer_norm()
     |> Axon.activation(:softmax)
   end
 
