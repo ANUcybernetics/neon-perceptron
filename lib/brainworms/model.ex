@@ -71,11 +71,7 @@ defmodule Brainworms.Model do
     iteration = Nx.to_number(step_state.i)
 
     if rem(iteration, @training_log_interval) == 0 do
-      IO.puts("\nIteration #{iteration}")
-
-      print_activation_bounds(
-        activations_from_model_state(step_state.model_state, [1, 1, 1, 1, 1, 1, 1])
-      )
+      print_param_summary(step_state)
     end
 
     schedule_training_step()
@@ -233,8 +229,28 @@ defmodule Brainworms.Model do
     |> Enum.map(&Nx.to_flat_list/1)
   end
 
-  def print_activation_bounds(activations) do
-    [input, dense_0, hidden_0, dense_1, softmax_0] = activations
+  def print_param_summary(step_state) do
+    input = List.duplicate(1, 7)
+
+    [input, dense_0, hidden_0, dense_1, softmax_0] =
+      activations_from_model_state(step_state.model_state, input)
+
+    IO.puts("\nIteration: #{Nx.to_number(step_state.i)}")
+
+    Axon.Losses.categorical_cross_entropy(step_state.y_true, step_state.y_pred)
+    |> Nx.to_list()
+    |> Enum.with_index()
+    |> Enum.map(fn {loss, i} -> "#{i}: #{Float.round(loss, 2)}" end)
+    |> Enum.join("  ")
+    |> then(&"Loss: #{&1}")
+    |> IO.puts()
+
+    Axon.Metrics.accuracy(step_state.y_true, step_state.y_pred)
+    |> Nx.to_number()
+    |> Kernel.*(100.0)
+    |> Float.round(2)
+    |> then(&"Accuracy: #{&1}%")
+    |> IO.puts()
 
     IO.puts(
       "Input: min=#{Float.round(Enum.min(input), 2)}, max=#{Float.round(Enum.max(input), 2)}"
