@@ -12,6 +12,7 @@ defmodule Brainworms.Model do
   """
 
   @training_sleep_interval 0
+  @training_log_interval 1_000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -67,6 +68,16 @@ defmodule Brainworms.Model do
   @impl true
   def handle_info(:train_step, state) do
     step_state = state.step_fn.(state.training_data, state.step_state)
+    iteration = Nx.to_number(step_state.i)
+
+    if rem(iteration, @training_log_interval) == 0 do
+      IO.puts("\nIteration #{iteration}")
+
+      print_activation_bounds(
+        activations_from_model_state(step_state.model_state, [1, 1, 1, 1, 1, 1, 1])
+      )
+    end
+
     schedule_training_step()
     {:noreply, %{state | step_state: step_state}}
   end
@@ -186,7 +197,7 @@ defmodule Brainworms.Model do
   The returned activations are scaled (layer-wise) to the range [0, 1] for visualization purposes.
 
   This is hard-coded to the structure of the model created by `new/1`---a fully-connected
-  network with one hidden layer (ReLU activation) and a softmax output layer. There might be a
+  network with one hidden layer (tanh activation) and a softmax output layer. There might be a
   nicer and more general way to get this info out of Axon (e.g. `Axon.build/2` with `print_values: true`
   will print some of the right values) but I haven't found it yet.
 
@@ -205,21 +216,45 @@ defmodule Brainworms.Model do
     activations_dense_0 =
       input_vector |> Nx.new_axis(1) |> Nx.multiply(kernel_0)
 
-    relu_0 = activations_dense_0 |> Nx.sum(axes: [0]) |> Axon.Activations.tanh()
+    hidden_0 = activations_dense_0 |> Nx.sum(axes: [0]) |> Axon.Activations.tanh()
 
     activations_dense_1 =
-      relu_0 |> Nx.new_axis(1) |> Nx.multiply(kernel_1)
+      hidden_0 |> Nx.new_axis(1) |> Nx.multiply(kernel_1)
 
     softmax_0 = activations_dense_1 |> Nx.sum(axes: [0]) |> Axon.Activations.softmax()
 
     [
       input_vector,
       activations_dense_0,
-      relu_0,
+      hidden_0,
       activations_dense_1,
       softmax_0
     ]
     |> Enum.map(&Nx.to_flat_list/1)
+  end
+
+  def print_activation_bounds(activations) do
+    [input, dense_0, hidden_0, dense_1, softmax_0] = activations
+
+    IO.puts(
+      "Input: min=#{Float.round(Enum.min(input), 2)}, max=#{Float.round(Enum.max(input), 2)}"
+    )
+
+    IO.puts(
+      "Dense 0: min=#{Float.round(Enum.min(dense_0), 2)}, max=#{Float.round(Enum.max(dense_0), 2)}"
+    )
+
+    IO.puts(
+      "Hidden 0: min=#{Float.round(Enum.min(hidden_0), 2)}, max=#{Float.round(Enum.max(hidden_0), 2)}"
+    )
+
+    IO.puts(
+      "Dense 1: min=#{Float.round(Enum.min(dense_1), 2)}, max=#{Float.round(Enum.max(dense_1), 2)}"
+    )
+
+    IO.puts(
+      "Softmax 0: min=#{Float.round(Enum.min(softmax_0), 2)}, max=#{Float.round(Enum.max(softmax_0), 2)}"
+    )
   end
 
   def activations(input) do
