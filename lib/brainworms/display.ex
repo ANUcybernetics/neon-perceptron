@@ -13,9 +13,82 @@ defmodule Brainworms.Display do
     # dense_1 is split into two parts, and the layer weights & final softmax outputs are interleaved
     dense_1_and_output_a: 0,
     dense_1_and_output_b: 24,
+    # hidden layer neurons are also in two separate (non-contiguous) locations
     hidden_0a: 15,
     hidden_0b: 39
   }
+
+  def set(brightness_list, :ss, seven_segment) do
+    brightness_list
+    |> replace_sublist(@pin_mapping.ss, seven_segment)
+  end
+
+  def set(brightness_list, :dense_0, dense_0) do
+    brightness_list
+    |> replace_sublist(@pin_mapping.dense_0, dense_0)
+  end
+
+  def set(brightness_list, :hidden, [hidden_0a, hidden_0b]) do
+    brightness_list
+    |> List.replace_at(@pin_mapping.hidden_0a, hidden_0a)
+    |> List.replace_at(@pin_mapping.hidden_0b, hidden_0b)
+  end
+
+  def set(brightness_list, :dense_1, dense_1) do
+    # split list in half
+    {dense_1_a, dense_1_b} = Enum.split(dense_1, 10)
+
+    # for each half, reduce through the brightness_list, replacing with the dense_1 values as appropriate
+    # needs to be done in two halves, because that's how it's wired
+    brightness_list
+    |> Enum.with_index()
+    |> Enum.map(fn {elem, idx} ->
+      offset = @pin_mapping.dense_1_and_output_a
+
+      if Integer.mod(idx, 3) in [0, 1] and idx >= offset and idx < offset + 10 do
+        {Enum.at(dense_1_a, idx - offset), idx}
+      else
+        {elem, idx}
+      end
+    end)
+    |> Enum.map(fn {elem, idx} ->
+      offset = @pin_mapping.dense_1_and_output_b
+
+      if Integer.mod(idx, 3) in [0, 1] and idx >= offset and idx < offset + 10 do
+        Enum.at(dense_1_b, idx - offset)
+      else
+        elem
+      end
+    end)
+  end
+
+  def set(brightness_list, :output, output) do
+    # split list in half
+    {output_a, output_b} = Enum.split(output, 5)
+
+    # for each half, reduce through the brightness_list, replacing with the dense_1 values as appropriate
+    # needs to be done in two halves, because that's how it's wired
+    brightness_list
+    |> Enum.with_index()
+    |> Enum.map(fn {elem, idx} ->
+      offset = @pin_mapping.dense_1_and_output_a
+
+      if Integer.mod(idx, 3) == 2 and idx >= offset and idx < offset + 5 do
+        {Enum.at(output_a, idx - offset), idx}
+      else
+        {elem, idx}
+      end
+    end)
+    |> Enum.map(fn {elem, idx} ->
+      offset = @pin_mapping.dense_1_and_output_b
+
+      if Integer.mod(idx, 3) == 2 and idx >= offset and idx < offset + 5 do
+        Enum.at(output_b, idx - offset)
+      else
+        elem
+      end
+    end)
+  end
 
   def set(spi_bus, activations) do
     # pull out the easy ones
