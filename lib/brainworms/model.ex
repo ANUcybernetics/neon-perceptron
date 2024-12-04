@@ -12,7 +12,7 @@ defmodule Brainworms.Model do
   """
 
   @training_sleep_interval 0
-  @training_log_interval 1_000
+  @training_log_interval 10_000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
