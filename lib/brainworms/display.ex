@@ -37,56 +37,48 @@ defmodule Brainworms.Display do
   def set(brightness_list, :dense_1, dense_1) do
     # split list in half
     {dense_1_a, dense_1_b} = Enum.split(dense_1, 10)
+    indices = [0, 1, 3, 4, 6, 7, 9, 10, 12, 13]
 
-    # for each half, reduce through the brightness_list, replacing with the dense_1 values as appropriate
-    # needs to be done in two halves, because that's how it's wired
+    replacements_1_a =
+      Enum.zip(indices, dense_1_a)
+      |> Enum.map(fn {idx, val} -> {idx + @pin_mapping.dense_1_and_output_a, val} end)
+      |> Map.new()
+
+    replacements_1 =
+      Enum.zip(indices, dense_1_b)
+      |> Enum.map(fn {idx, val} -> {idx + @pin_mapping.dense_1_and_output_b, val} end)
+      |> Map.new()
+      |> Map.merge(replacements_1_a)
+
+    # replace the values corresponding to the specific dense_1 pins, leaving the rest as they are
     brightness_list
     |> Enum.with_index()
     |> Enum.map(fn {elem, idx} ->
-      offset = @pin_mapping.dense_1_and_output_a
-
-      if Integer.mod(idx, 3) in [0, 1] and idx >= offset and idx < offset + 10 do
-        {Enum.at(dense_1_a, idx - offset), idx}
-      else
-        {elem, idx}
-      end
-    end)
-    |> Enum.map(fn {elem, idx} ->
-      offset = @pin_mapping.dense_1_and_output_b
-
-      if Integer.mod(idx, 3) in [0, 1] and idx >= offset and idx < offset + 10 do
-        Enum.at(dense_1_b, idx - offset)
-      else
-        elem
-      end
+      Map.get(replacements_1, idx, elem)
     end)
   end
 
   def set(brightness_list, :output, output) do
     # split list in half
-    {output_a, output_b} = Enum.split(output, 5)
+    {output_a, output_b} = Enum.split(output, 10)
+    indices = [2, 5, 8, 11, 14]
 
-    # for each half, reduce through the brightness_list, replacing with the dense_1 values as appropriate
-    # needs to be done in two halves, because that's how it's wired
+    replacements_1_a =
+      Enum.zip(indices, output_a)
+      |> Enum.map(fn {idx, val} -> {idx + @pin_mapping.dense_1_and_output_a, val} end)
+      |> Map.new()
+
+    replacements_1 =
+      Enum.zip(indices, output_b)
+      |> Enum.map(fn {idx, val} -> {idx + @pin_mapping.dense_1_and_output_b, val} end)
+      |> Map.new()
+      |> Map.merge(replacements_1_a)
+
+    # replace the values corresponding to the specific dense_1 pins, leaving the rest as they are
     brightness_list
     |> Enum.with_index()
     |> Enum.map(fn {elem, idx} ->
-      offset = @pin_mapping.dense_1_and_output_a
-
-      if Integer.mod(idx, 3) == 2 and idx >= offset and idx < offset + 5 do
-        {Enum.at(output_a, idx - offset), idx}
-      else
-        {elem, idx}
-      end
-    end)
-    |> Enum.map(fn {elem, idx} ->
-      offset = @pin_mapping.dense_1_and_output_b
-
-      if Integer.mod(idx, 3) == 2 and idx >= offset and idx < offset + 5 do
-        Enum.at(output_b, idx - offset)
-      else
-        elem
-      end
+      Map.get(replacements_1, idx, elem)
     end)
   end
 
