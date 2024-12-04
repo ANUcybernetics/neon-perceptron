@@ -32,8 +32,7 @@ defmodule Brainworms.BrainServer do
   def init(:ok) do
     {:ok, spi} = Circuits.SPI.open("spidev0.0")
 
-    Process.send_after(self(), :demo, @display_refresh_interval)
-    Process.send_after(self(), :demo, @display_refresh_interval)
+    Process.send_after(self(), :display, @display_refresh_interval)
 
     {:ok,
      %{
@@ -59,9 +58,10 @@ defmodule Brainworms.BrainServer do
       # nice to reverse it so that the "A" segment is changing fastest
       |> Enum.reverse()
 
-    Display.breathe_demo(state.devices.spi, knob_bitlist)
+    # Display.breathe_demo(state.devices.spi, knob_bitlist)
+    Display.layer_demo(state.devices.spi)
 
-    Process.send_after(self(), :display, @display_refresh_interval)
+    Process.send_after(self(), :demo, @display_refresh_interval)
     {:noreply, update_seven_segment(state, knob_bitlist)}
   end
 
@@ -73,17 +73,7 @@ defmodule Brainworms.BrainServer do
       # nice to reverse it so that the "A" segment is changing fastest
       |> Enum.reverse()
 
-    seven_segment =
-      if DateTime.before?(DateTime.utc_now(), state.drift_at) do
-        knob_bitlist
-      else
-        Utils.apply_drift(
-          knob_bitlist,
-          state.drift_params,
-          Utils.float_now()
-        )
-      end
-
+    seven_segment = knob_bitlist
     activations = Model.activations(seven_segment)
 
     Display.set(state.devices.spi, activations)
