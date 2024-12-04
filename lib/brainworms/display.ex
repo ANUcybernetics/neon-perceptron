@@ -19,13 +19,13 @@ defmodule Brainworms.Display do
 
   def set(spi_bus, activations) do
     # pull out the easy ones
-    [seven_segment, dense_0, [hidden_0a, hidden_0b], dense_1, softmax_0] =
+    [seven_segment, dense_0, [hidden_0a, hidden_0b], dense_1, output] =
       scale_activations(activations)
 
     {dense_1_and_output_a, dense_1_and_output_b} =
       dense_1
       |> Enum.chunk_every(2)
-      |> Enum.zip_with(softmax_0, fn weights, output -> weights ++ [output] end)
+      |> Enum.zip_with(output, fn weights, output -> weights ++ [output] end)
       |> List.flatten()
       |> Enum.split(15)
 
@@ -161,7 +161,7 @@ defmodule Brainworms.Display do
   end
 
   def scale_activations(activations) do
-    [input, dense_0, hidden_0, dense_1, softmax_0] = activations
+    [input, dense_0, hidden_0, dense_1, output] = activations
 
     [
       input,
@@ -169,7 +169,7 @@ defmodule Brainworms.Display do
       # scale the ReLU units (which will always be > 0) to approach 1 as they get large
       Enum.map(hidden_0, fn x -> x / (1 + x) end),
       scale_to_0_1(dense_1),
-      softmax_0
+      output
     ]
   end
 
