@@ -239,12 +239,15 @@ defmodule Brainworms.Model do
 
     IO.puts("\nIteration: #{Nx.to_number(step_state.i)}")
 
-    Axon.Losses.categorical_cross_entropy(step_state.y_true, step_state.y_pred)
-    |> Nx.to_list()
+    loss =
+      Axon.Losses.categorical_cross_entropy(step_state.y_true, step_state.y_pred)
+      |> Nx.to_list()
+
+    loss
     |> Enum.with_index()
-    |> Enum.map(fn {loss, i} -> "#{i}/#{Float.round(loss, 2)}" end)
+    |> Enum.map(fn {l, i} -> "#{i}/#{Float.round(l, 2)}" end)
     |> Enum.join("  ")
-    |> then(&"Loss: #{&1}")
+    |> then(&"Loss: #{loss |> Enum.sum() |> Float.round(2)} (#{&1})")
     |> IO.puts()
 
     Axon.Metrics.accuracy(step_state.y_true, step_state.y_pred)
