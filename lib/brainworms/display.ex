@@ -60,7 +60,7 @@ defmodule Brainworms.Display do
 
   def set(brightness_list, :output, output) do
     # split list in half
-    {output_a, output_b} = Enum.split(output, 10)
+    {output_a, output_b} = Enum.split(output, 5)
     indices = [2, 5, 8, 11, 14]
 
     replacements_1_a =
