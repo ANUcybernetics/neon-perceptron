@@ -34,6 +34,7 @@ defmodule Brainworms.MixProject do
       {:shoehorn, "~> 0.9.1"},
       {:ring_logger, "~> 0.11.0"},
       {:toolshed, "~> 0.4.0"},
+      {:req, "~> 0.5"},
 
       # might not need all of these, can thin out later
       {:circuits_uart, "~> 1.3"},
