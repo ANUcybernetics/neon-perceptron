@@ -18,7 +18,7 @@ defmodule Brainworms.Display do
     hidden_0b: 39
   }
 
-  def set(brightness_list, :ss, seven_segment) do
+  def set(brightness_list, :input, seven_segment) do
     brightness_list
     |> replace_sublist(@pin_mapping.ss, seven_segment)
   end
@@ -83,25 +83,15 @@ defmodule Brainworms.Display do
   end
 
   def set(spi_bus, activations) do
-    # pull out the easy ones
-    [seven_segment, dense_0, [hidden_0a, hidden_0b], dense_1, output] =
-      scale_activations(activations)
-
-    {dense_1_and_output_a, dense_1_and_output_b} =
-      dense_1
-      |> Enum.chunk_every(2)
-      |> Enum.zip_with(output, fn weights, output -> weights ++ [output] end)
-      |> List.flatten()
-      |> Enum.split(15)
+    [seven_segment, dense_0, hidden_0, dense_1, output] = scale_activations(activations)
 
     data =
       List.duplicate(0, 24 * @pwm_controller_count)
-      |> replace_sublist(@pin_mapping.ss, seven_segment)
-      |> replace_sublist(@pin_mapping.dense_0, dense_0)
-      |> replace_sublist(@pin_mapping.dense_1_and_output_a, dense_1_and_output_a)
-      |> replace_sublist(@pin_mapping.dense_1_and_output_b, dense_1_and_output_b)
-      |> replace_sublist(@pin_mapping.hidden_0a, [hidden_0a])
-      |> replace_sublist(@pin_mapping.hidden_0b, [hidden_0b])
+      |> set(:input, seven_segment)
+      |> set(:dense_0, dense_0)
+      |> set(:hidden, hidden_0)
+      |> set(:dense_1, dense_1)
+      |> set(:output, output)
       # it's a big'ol shift register, so we need to send the bits in reverse
       |> Enum.reverse()
       |> Utils.pwm_encode()
@@ -142,7 +132,7 @@ defmodule Brainworms.Display do
     data =
       case layer do
         0 ->
-          set(zeroes, :ss, List.duplicate(1, 7))
+          set(zeroes, :input, List.duplicate(1, 7))
 
         1 ->
           set(zeroes, :dense_0, List.duplicate(1, 14))
@@ -229,23 +219,10 @@ defmodule Brainworms.Display do
 
     [
       input,
-      scale_to_0_1(dense_0),
-      # scale the ReLU units (which will always be > 0) to approach 1 as they get large
-      Enum.map(hidden_0, fn x -> x / (1 + x) end),
-      scale_to_0_1(dense_1),
-      output
+      Enum.map(dense_0, &(&1 * 0.5 + 0.5)),
+      Enum.map(hidden_0, &(&1 * 0.5 + 0.5)),
+      Enum.map(dense_1, &(&1 * 0.5 + 0.5)),
+      Enum.map(output, &(&1 * 3))
     ]
-  end
-
-  defp scale_to_0_1(brightness_list) do
-    min_value = Enum.min(brightness_list)
-    max_value = Enum.max(brightness_list)
-    range = max_value - min_value
-
-    if range == 0 do
-      List.duplicate(0, length(brightness_list))
-    else
-      Enum.map(brightness_list, fn x -> (x - min_value) / range end)
-    end
   end
 end
