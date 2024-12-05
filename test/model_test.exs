@@ -113,4 +113,31 @@ defmodule Brainworms.ModelTest do
     # this is bad check; they should be zero if I'm getting this right
     assert Enum.all?(distances, fn d -> d < 1.0 end)
   end
+
+  test "prediction test (no training)" do
+    # model, dataset & test input the same in both cases
+    model = Brainworms.Model.new(2)
+    {inputs, targets} = Brainworms.Model.training_set()
+
+    # keep this at 1_000 for now, but if you want accuracy to reach 100% you'll need more like 10_000
+    num_epochs = 100
+
+    # the "build & train in one hit" setup
+    {_init_fn, predict_fn} = Axon.build(model, print_values: false)
+    training_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
+    params = Brainworms.Model.train(model, training_data, epochs: num_epochs)
+
+    Axon.reduce_nodes(model, [], fn
+      %Axon.Node{op: :dense} = node, acc ->
+        [node | acc]
+
+      _, acc ->
+        acc
+    end)
+    |> dbg()
+
+    input = inputs[[digit: 1]] |> Nx.new_axis(0)
+
+    _y_pred = predict_fn.(params, input)
+  end
 end
