@@ -85,16 +85,6 @@ defmodule Brainworms.Model do
   display) and a 10-dimensional output (for the softmax predictions; one for each digit 0-9).
 
   `hidden_layer_sizes` is the size of the hidden layer.
-
-  Example: create a networks with a single hidden layer of 2 neurons:
-
-      iex> Brainworms.Model.new(2)
-      #Axon<
-        inputs: %{"bitlist" => {nil, 7}}
-        outputs: "softmax_0"
-        nodes: 5
-      >
-
   """
   def new(hidden_layer_size) do
     Axon.input("bitlist", shape: {nil, 7})
