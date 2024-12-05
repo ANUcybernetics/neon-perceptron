@@ -88,11 +88,18 @@ defmodule Brainworms.Model do
   """
   def new(hidden_layer_size) do
     Axon.input("bitlist", shape: {nil, 7})
+    # |> Axon.attach_hook(&IO.inspect(&1, label: :input), on: :forward, mode: :inference)
     |> Axon.dense(hidden_layer_size)
+    # |> Axon.attach_hook(&IO.inspect(&1, label: :dense_0), on: :forward, mode: :inference)
     |> Axon.tanh()
+    # |> Axon.attach_hook(&IO.inspect(&1, label: :hidden_0), on: :forward, mode: :inference)
     |> Axon.dense(10)
+    # |> Axon.attach_hook(&IO.inspect(&1, label: :dense_1), on: :forward, mode: :inference)
     |> Axon.layer_norm()
+    # |> Axon.attach_hook(&IO.inspect(&1, label: :layer_norm_0), on: :forward, mode: :inference)
     |> Axon.activation(:softmax)
+
+    # |> Axon.attach_hook(&IO.inspect(&1, label: :output), on: :forward, mode: :inference)
   end
 
   @doc """
