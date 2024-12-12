@@ -11,8 +11,10 @@ defmodule Brainworms.Model do
   how they work.
   """
 
-  @training_sleep_interval 0
+  # how often to print summary stats to the log (disable for prod)
   @training_log_interval 10_000
+  # in steps (need to tweak once we're on the board)
+  @display_update_interval 1000
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -298,6 +300,6 @@ defmodule Brainworms.Model do
   end
 
   defp schedule_training_step() do
-    Process.send_after(self(), :train_step, @training_sleep_interval)
+    Process.send_after(self(), :train_step, 0)
   end
 end
