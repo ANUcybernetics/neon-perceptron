@@ -1,6 +1,8 @@
 defmodule Brainworms.Model do
   use GenServer
   alias Brainworms.Utils
+  alias Brainworms.Knob
+  alias Brainworms.Display
 
   @moduledoc """
   Helper module for defining, training and running inference with fully-connected
@@ -55,12 +57,7 @@ defmodule Brainworms.Model do
 
   @impl true
   def handle_call({:predict, input}, _from, state) do
-    batched_input = input |> Nx.tensor() |> Nx.new_axis(0)
-
-    prediction =
-      state.predict_fn.(state.step_state.model_state, batched_input)
-      |> Nx.to_flat_list()
-
+    prediction = predict_helper(input, state)
     {:reply, prediction, state}
   end
 
@@ -131,6 +128,13 @@ defmodule Brainworms.Model do
   end
 
   @impl true
+  def handle_cast({:predict, input}, state) do
+    # run for the side effect of triggering the calculation of the activations
+    predict_helper(input, state)
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info(:train_step, state) do
     step_state = state.step_fn.(state.training_data, state.step_state)
     iteration = Nx.to_number(step_state.i)
@@ -141,10 +145,11 @@ defmodule Brainworms.Model do
 
     if rem(iteration, @display_update_interval) == 0 do
       # need to trigger a prediction to update the activations
-      Brainworms.Knob.position()
-      |> predict()
+      seven_segment = Knob.position() |> Utils.integer_to_bitlist()
 
-      Brainworms.Display.update(state.activations)
+      GenServer.cast(__MODULE__, {:predict, seven_segment})
+
+      Display.update(state.activations)
     end
 
     schedule_training_step()
@@ -238,37 +243,6 @@ defmodule Brainworms.Model do
     |> Axon.Loop.run(data, Axon.ModelState.empty(), opts)
   end
 
-  @doc """
-  Run single-shot inference for a trained model.
-
-  Intended use:
-  - `model` comes from `new/1`
-  - `params` comes from `train/4`
-
-  For a given `digit` 0-9, return the predicted class distribution under `model`.
-  """
-  def predict(model, params, digit) do
-    input = Utils.digit_to_bitlist(digit) |> Nx.tensor() |> Nx.new_axis(0)
-    Axon.predict(model, params, input)
-  end
-
-  @doc """
-  Run single-shot inference for a trained model and return the most likely digit class.
-
-  Intended use:
-  - `model` comes from `new/1`
-  - `params` comes from `train/4`
-
-  For a given `digit` 0-9, return the predicted digit class (0-9) under `model`.
-  """
-  def predict_class(model, params, digit) do
-    model
-    |> predict(params, digit)
-    |> Nx.argmax(axis: 1)
-    |> Nx.to_flat_list()
-    |> List.first()
-  end
-
   def print_param_summary(step_state, activations) do
     input = List.duplicate(1.0, 7)
 
@@ -350,5 +324,12 @@ defmodule Brainworms.Model do
       dense_1: List.duplicate(0.0, 20),
       output: List.duplicate(0.0, 10)
     }
+  end
+
+  defp predict_helper(input, state) do
+    batched_input = input |> Nx.tensor() |> Nx.new_axis(0)
+
+    state.predict_fn.(state.step_state.model_state, batched_input)
+    |> Nx.to_flat_list()
   end
 end
