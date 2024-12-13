@@ -285,10 +285,10 @@ defmodule Brainworms.Model do
       "  Softmax 0: min=#{Float.round(Enum.min(softmax_0), 2)}, max=#{Float.round(Enum.max(softmax_0), 2)}"
     )
 
-    activation_list = activations |> Map.values() |> List.flatten()
+    activation_list = activations |> Map.delete(:input) |> Map.values() |> List.flatten()
 
     IO.puts(
-      "  Overall: min=#{Float.round(Enum.min(activation_list), 2)}, max=#{Float.round(Enum.max(activation_list), 2)}"
+      "  Overall (excl. input): min=#{Float.round(Enum.min(activation_list), 2)}, max=#{Float.round(Enum.max(activation_list), 2)}"
     )
   end
 
