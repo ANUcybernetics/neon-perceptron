@@ -39,7 +39,7 @@ defmodule Brainworms.Knob do
            pin_b: nil,
            previous_a: 0,
            previous_b: 0,
-           position: 127
+           position: 0
          }}
     end
   end
