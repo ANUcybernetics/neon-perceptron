@@ -136,6 +136,7 @@ defmodule Brainworms.Display do
       |> set_layer(:output, output)
       # it's a big'ol shift register, so we need to send the bits in reverse
       |> Enum.reverse()
+      |> pulse_negatives()
       |> Utils.pwm_encode()
 
     Circuits.SPI.transfer!(spi_bus, data)
@@ -255,20 +256,8 @@ defmodule Brainworms.Display do
       Enum.drop(list, start_index + length(new_sublist))
   end
 
-  def scale_activations(%{
-        input: input,
-        dense_0: dense_0,
-        hidden_0: hidden_0,
-        dense_1: dense_1,
-        output: output
-      }) do
-    %{
-      input: input,
-      dense_0: Enum.map(dense_0, &abs/1),
-      hidden_0: Enum.map(hidden_0, &abs/1),
-      dense_1: Enum.map(dense_1, &abs/1),
-      output: Enum.map(output, &(&1 * 3))
-    }
+  def scale_activations(activations) do
+    Map.update!(activations, :output, fn output -> Enum.map(output, &(&1 * 3)) end)
   end
 
   ## client API
@@ -279,5 +268,22 @@ defmodule Brainworms.Display do
 
   def demo(type) do
     Process.send(__MODULE__, {:demo, type}, [])
+  end
+
+  defp pulse_negatives(brightness_list) do
+    amp = 0.2
+    freq = 0.5
+    t = Utils.float_now()
+
+    brightness_list
+    |> Enum.map(fn val ->
+      if val < 0 do
+        # scale to -amp to 0 and add animation
+        # negative version:
+        -val + amp * Utils.osc(freq, 0.0, t)
+      else
+        val
+      end
+    end)
   end
 end
