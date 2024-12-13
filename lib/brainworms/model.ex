@@ -140,6 +140,10 @@ defmodule Brainworms.Model do
     end
 
     if rem(iteration, @display_update_interval) == 0 do
+      # need to trigger a prediction to update the activations
+      Brainworms.Knob.position()
+      |> predict()
+
       Brainworms.Display.update(state.activations)
     end
 
