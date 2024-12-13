@@ -264,9 +264,9 @@ defmodule Brainworms.Display do
       }) do
     %{
       input: input,
-      dense_0: Enum.map(dense_0, &(&1 * 0.5 + 0.5)),
-      hidden_0: Enum.map(hidden_0, &(&1 * 0.5 + 0.5)),
-      dense_1: Enum.map(dense_1, &(&1 * 0.5 + 0.5)),
+      dense_0: Enum.map(dense_0, &abs/1),
+      hidden_0: Enum.map(hidden_0, &abs/1),
+      dense_1: Enum.map(dense_1, &abs/1),
       output: Enum.map(output, &(&1 * 3))
     }
   end
