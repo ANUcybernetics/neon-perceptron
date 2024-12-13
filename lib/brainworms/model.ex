@@ -12,13 +12,23 @@ defmodule Brainworms.Model do
   """
 
   # how often to print summary stats to the log (disable for prod)
-  @training_log_interval 10_000
+  @training_log_interval 1_000
   # in steps (need to tweak once we're on the board)
-  @display_update_interval 1000
+  @display_update_interval 100
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
+
+  # @type state :: %{
+  #         activations: %{
+  #           input: list(float()),
+  #           dense_0: list(float()),
+  #           hidden_0: list(float()),
+  #           dense_1: list(float()),
+  #           output: list(float())
+  #         }
+  #       }
 
   @impl true
   def init(_opts) do
@@ -26,6 +36,7 @@ defmodule Brainworms.Model do
     model = new(2)
     training_data = training_set()
     {init_fn, step_fn} = Axon.Loop.train_step(model, :categorical_cross_entropy, :adam)
+    {_, predict_fn} = Axon.build(model)
     step_state = init_fn.(training_data, Axon.ModelState.empty())
 
     schedule_training_step()
@@ -36,14 +47,10 @@ defmodule Brainworms.Model do
        training_data: training_data,
        init_fn: init_fn,
        step_fn: step_fn,
-       step_state: step_state
+       predict_fn: predict_fn,
+       step_state: step_state,
+       activations: null_activations()
      }}
-  end
-
-  @impl true
-  def handle_call({:activations, input}, _from, state) do
-    activations = activations_from_model_state(state.step_state.model_state, input)
-    {:reply, activations, state}
   end
 
   @impl true
@@ -51,7 +58,8 @@ defmodule Brainworms.Model do
     batched_input = input |> Nx.tensor() |> Nx.new_axis(0)
 
     prediction =
-      Axon.predict(state.model, state.step_state.model_state, batched_input) |> Nx.to_flat_list()
+      state.predict_fn.(state.step_state.model_state, batched_input)
+      |> Nx.to_flat_list()
 
     {:reply, prediction, state}
   end
@@ -62,9 +70,60 @@ defmodule Brainworms.Model do
   end
 
   @impl true
+  def handle_call(:activations, _from, state) do
+    {:reply, state.activations, state}
+  end
+
+  @impl true
   def handle_call(:reset, _from, state) do
     step_state = state.init_fn.(state.training_data, Axon.ModelState.empty())
     {:reply, :ok, %{state | step_state: step_state}}
+  end
+
+  @impl true
+  def handle_call({:calc_layer_activations, :input, input}, _from, state) do
+    kernel = get_kernel(state.step_state.model_state, "dense_0")
+
+    # this is a bit "fake", because we ignore the bias
+    # TODO perhaps Axon can set the model to learn bias-less dense kernels?
+    dense_0_activations =
+      input
+      |> Nx.transpose()
+      |> Nx.broadcast(Nx.shape(kernel))
+      |> Nx.multiply(kernel)
+      # |> Nx.flatten()
+      |> Nx.to_flat_list()
+
+    activations = Map.merge(state.activations, %{input: input, dense_0: dense_0_activations})
+    {:reply, :ok, %{state | activations: activations}}
+  end
+
+  @impl true
+  def handle_call({:calc_layer_activations, :hidden_0, hidden_0}, _from, state) do
+    kernel = get_kernel(state.step_state.model_state, "dense_1")
+
+    # this is a bit "fake", because we ignore the bias
+    # TODO perhaps Axon can set the model to learn bias-less dense kernels?
+    dense_1_activations =
+      hidden_0
+      |> Nx.transpose()
+      |> Nx.broadcast(Nx.shape(kernel))
+      |> Nx.multiply(kernel)
+      # |> Nx.flatten()
+      |> Nx.transpose()
+      |> Nx.to_flat_list()
+
+    activations =
+      Map.merge(state.activations, %{hidden_0: hidden_0, dense_1: dense_1_activations})
+
+    {:reply, :ok, %{state | activations: activations}}
+  end
+
+  @impl true
+  def handle_call({:calc_layer_activations, :output, output}, _from, state) do
+    activations = Map.merge(state.activations, %{output: output})
+    dbg(activations)
+    {:reply, :ok, %{state | activations: activations}}
   end
 
   @impl true
@@ -73,7 +132,11 @@ defmodule Brainworms.Model do
     iteration = Nx.to_number(step_state.i)
 
     if rem(iteration, @training_log_interval) == 0 do
-      print_param_summary(step_state)
+      print_param_summary(step_state, state.activations)
+    end
+
+    if rem(iteration, @display_update_interval) == 0 do
+      Brainworms.Display.update(state.activations)
     end
 
     schedule_training_step()
@@ -90,18 +153,30 @@ defmodule Brainworms.Model do
   """
   def new(hidden_layer_size) do
     Axon.input("bitlist", shape: {nil, 7})
-    # |> Axon.attach_hook(&IO.inspect(&1, label: :input), on: :forward, mode: :inference)
+    |> calc_layer_activations_hook(:input)
     |> Axon.dense(hidden_layer_size)
-    # |> Axon.attach_hook(&IO.inspect(&1, label: :dense_0), on: :forward, mode: :inference)
     |> Axon.tanh()
-    # |> Axon.attach_hook(&IO.inspect(&1, label: :hidden_0), on: :forward, mode: :inference)
+    |> calc_layer_activations_hook(:hidden_0)
     |> Axon.dense(10)
-    # |> Axon.attach_hook(&IO.inspect(&1, label: :dense_1), on: :forward, mode: :inference)
     |> Axon.layer_norm()
-    # |> Axon.attach_hook(&IO.inspect(&1, label: :layer_norm_0), on: :forward, mode: :inference)
     |> Axon.activation(:softmax)
+    |> calc_layer_activations_hook(:output)
+  end
 
-    # |> Axon.attach_hook(&IO.inspect(&1, label: :output), on: :forward, mode: :inference)
+  defp get_kernel(model_state, layer_name) do
+    %{data: %{^layer_name => %{"kernel" => kernel}}} = model_state
+    kernel
+  end
+
+  defp calc_layer_activations_hook(model, layer) do
+    Axon.attach_hook(
+      model,
+      fn value ->
+        GenServer.call(__MODULE__, {:calc_layer_activations, layer, value})
+      end,
+      on: :forward,
+      mode: :inference
+    )
   end
 
   @doc """
@@ -185,56 +260,11 @@ defmodule Brainworms.Model do
     |> List.first()
   end
 
-  @doc """
-  Takes the current model state and a bitlist input and returns a list of the intermediate
-  computations and final activations during inference. The list includes
-  element-wise multiplications and summed results for each layer, in order.
+  def print_param_summary(step_state, activations) do
+    input = List.duplicate(1.0, 7)
 
-  The returned activations are scaled (layer-wise) to the range [0, 1] for visualization purposes.
-
-  This is hard-coded to the structure of the model created by `new/1`---a fully-connected
-  network with one hidden layer (tanh activation) and a softmax output layer. There might be a
-  nicer and more general way to get this info out of Axon (e.g. `Axon.build/2` with `print_values: true`
-  will print some of the right values) but I haven't found it yet.
-
-  Used to map neural network calculations to wire brightness values for visualization.
-  """
-  def activations_from_model_state(model_state, input) do
-    weights = Map.get(model_state, :data)
-
-    %{
-      "dense_0" => %{"bias" => _bias_0, "kernel" => kernel_0},
-      "dense_1" => %{"bias" => _bias_1, "kernel" => kernel_1}
-    } = weights
-
-    input_vector = Nx.tensor(input, type: :f32)
-
-    activations_dense_0 =
-      input_vector |> Nx.new_axis(1) |> Nx.multiply(kernel_0)
-
-    hidden_0 = activations_dense_0 |> Nx.sum(axes: [0]) |> Axon.Activations.tanh()
-
-    activations_dense_1 =
-      hidden_0 |> Nx.new_axis(1) |> Nx.multiply(kernel_1)
-
-    softmax_0 = activations_dense_1 |> Nx.sum(axes: [0]) |> Axon.Activations.softmax()
-
-    [
-      input_vector,
-      activations_dense_0,
-      hidden_0,
-      activations_dense_1,
-      softmax_0
-    ]
-    |> Enum.map(&Nx.to_flat_list/1)
-  end
-
-  def print_param_summary(step_state) do
-    input = List.duplicate(1, 7)
-
-    [input, dense_0, hidden_0, dense_1, softmax_0] =
-      activations =
-      activations_from_model_state(step_state.model_state, input)
+    %{dense_0: dense_0, hidden_0: hidden_0, dense_1: dense_1, output: softmax_0} =
+      activations
 
     IO.puts("\nIteration: #{Nx.to_number(step_state.i)}")
 
@@ -276,10 +306,10 @@ defmodule Brainworms.Model do
       "  Softmax 0: min=#{Float.round(Enum.min(softmax_0), 2)}, max=#{Float.round(Enum.max(softmax_0), 2)}"
     )
 
-    activations = List.flatten(activations)
+    activation_list = activations |> Map.values() |> List.flatten()
 
     IO.puts(
-      "  Overall: min=#{Float.round(Enum.min(activations), 2)}, max=#{Float.round(Enum.max(activations), 2)}"
+      "  Overall: min=#{Float.round(Enum.min(activation_list), 2)}, max=#{Float.round(Enum.max(activation_list), 2)}"
     )
   end
 
@@ -301,5 +331,15 @@ defmodule Brainworms.Model do
 
   defp schedule_training_step() do
     Process.send_after(self(), :train_step, 0)
+  end
+
+  def null_activations() do
+    %{
+      input: List.duplicate(0.0, 7),
+      dense_0: List.duplicate(0.0, 14),
+      hidden_0: List.duplicate(0.0, 2),
+      dense_1: List.duplicate(0.0, 20),
+      output: List.duplicate(0.0, 10)
+    }
   end
 end

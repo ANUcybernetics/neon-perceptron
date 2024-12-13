@@ -11,9 +11,9 @@ defmodule Brainworms.Application do
       [
         # Knob starts first
         Brainworms.Knob,
-        # BrainServer starts after Knob
-        Brainworms.BrainServer,
-        # Model starts after BrainServer
+        # Display starts after Knob
+        Brainworms.Display,
+        # Model starts after Display
         Brainworms.Model
       ] ++ target_children()
 

@@ -134,10 +134,9 @@ defmodule Brainworms.ModelTest do
       _, acc ->
         acc
     end)
-    |> dbg()
 
     input = inputs[[digit: 1]] |> Nx.new_axis(0)
 
-    _y_pred = predict_fn.(params, input)
+    predict_fn.(params, input)
   end
 end

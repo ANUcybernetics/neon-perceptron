@@ -1,10 +1,48 @@
 defmodule Brainworms.Display do
   @moduledoc """
-  Handles display output through PWM controllers.
+  A GenServer for controlling and displaying neural network activations on an LED display.
   """
+  use GenServer
 
   alias Brainworms.Utils
 
+  def start_link(_opts) do
+    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+  end
+
+  @type state :: %{spi: %Circuits.SPI.SPIDev{}}
+
+  @spec init(:ok) :: {:ok, state()}
+  @impl true
+  def init(:ok) do
+    {:ok, spi} = Circuits.SPI.open("spidev0.0")
+    {:ok, %{spi: spi}}
+  end
+
+  @impl true
+  def handle_cast({:update, activations}, state) do
+    activations
+    |> scale_activations()
+    |> then(&set_activations(state.spi, &1))
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:demo, :layer}, state) do
+    layer_demo(state.spi)
+    Process.send_after(self(), {:demo, :layer}, 10)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:demo, :breathe}, state) do
+    breathe_demo(state.spi)
+    Process.send_after(self(), {:demo, :breathe}, 10)
+    {:noreply, state}
+  end
+
+  # from here, the nitty gritty of how to display the activations on the nOOdz
   @pwm_controller_count 3
 
   @pin_mapping %{
@@ -18,23 +56,23 @@ defmodule Brainworms.Display do
     hidden_0b: 39
   }
 
-  def set(brightness_list, :input, seven_segment) do
+  def set_layer(brightness_list, :input, seven_segment) do
     brightness_list
     |> replace_sublist(@pin_mapping.ss, seven_segment)
   end
 
-  def set(brightness_list, :dense_0, dense_0) do
+  def set_layer(brightness_list, :dense_0, dense_0) do
     brightness_list
     |> replace_sublist(@pin_mapping.dense_0, dense_0)
   end
 
-  def set(brightness_list, :hidden, [hidden_0a, hidden_0b]) do
+  def set_layer(brightness_list, :hidden, [hidden_0a, hidden_0b]) do
     brightness_list
     |> List.replace_at(@pin_mapping.hidden_0a, hidden_0a)
     |> List.replace_at(@pin_mapping.hidden_0b, hidden_0b)
   end
 
-  def set(brightness_list, :dense_1, dense_1) do
+  def set_layer(brightness_list, :dense_1, dense_1) do
     # split list in half
     {dense_1_a, dense_1_b} = Enum.split(dense_1, 10)
     indices = [0, 1, 3, 4, 6, 7, 9, 10, 12, 13]
@@ -58,7 +96,7 @@ defmodule Brainworms.Display do
     end)
   end
 
-  def set(brightness_list, :output, output) do
+  def set_layer(brightness_list, :output, output) do
     # split list in half
     {output_a, output_b} = Enum.split(output, 5)
     indices = [2, 5, 8, 11, 14]
@@ -82,16 +120,20 @@ defmodule Brainworms.Display do
     end)
   end
 
-  def set(spi_bus, activations) do
-    [seven_segment, dense_0, hidden_0, dense_1, output] = scale_activations(activations)
-
+  def set_activations(spi_bus, %{
+        input: seven_segment,
+        dense_0: dense_0,
+        hidden_0: hidden_0,
+        dense_1: dense_1,
+        output: output
+      }) do
     data =
       List.duplicate(0, 24 * @pwm_controller_count)
-      |> set(:input, seven_segment)
-      |> set(:dense_0, dense_0)
-      |> set(:hidden, hidden_0)
-      |> set(:dense_1, dense_1)
-      |> set(:output, output)
+      |> set_layer(:input, seven_segment)
+      |> set_layer(:dense_0, dense_0)
+      |> set_layer(:hidden, hidden_0)
+      |> set_layer(:dense_1, dense_1)
+      |> set_layer(:output, output)
       # it's a big'ol shift register, so we need to send the bits in reverse
       |> Enum.reverse()
       |> Utils.pwm_encode()
@@ -101,17 +143,15 @@ defmodule Brainworms.Display do
 
   @doc """
   Demonstrates breathing effect on LED display by applying oscillating PWM values.
-  Takes current knob position as input to determine seven segment display pattern,
-  then applies a breathing pattern across all other controllers.
+  Creates a pulsing wave pattern across all LEDs.
 
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
   """
-  def breathe_demo(spi_bus, seven_segment) do
+  def breathe_demo(spi_bus) do
     data =
       Range.new(1, 24 * @pwm_controller_count)
       |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * 0.5 * Integer.mod(x, 19)) end)
-      |> replace_sublist(@pin_mapping.ss, seven_segment)
       # it's a big'ol shift register, so we need to send the bits in reverse
       |> Enum.reverse()
       |> Utils.pwm_encode()
@@ -120,7 +160,8 @@ defmodule Brainworms.Display do
   end
 
   @doc """
-  Show a demo by flashing through the layers of the network.
+  Shows a sequential demonstration of each neural network layer by illuminating
+  corresponding LEDs one layer at a time.
 
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
@@ -132,19 +173,19 @@ defmodule Brainworms.Display do
     data =
       case layer do
         0 ->
-          set(zeroes, :input, List.duplicate(1, 7))
+          set_layer(zeroes, :input, List.duplicate(1, 7))
 
         1 ->
-          set(zeroes, :dense_0, List.duplicate(1, 14))
+          set_layer(zeroes, :dense_0, List.duplicate(1, 14))
 
         2 ->
-          set(zeroes, :hidden, [1, 1])
+          set_layer(zeroes, :hidden, [1, 1])
 
         3 ->
-          set(zeroes, :dense_1, List.duplicate(1, 20))
+          set_layer(zeroes, :dense_1, List.duplicate(1, 20))
 
         4 ->
-          set(zeroes, :output, List.duplicate(1, 10))
+          set_layer(zeroes, :output, List.duplicate(1, 10))
       end
       # it's a big'ol shift register, so we need to send the bits in reverse
       |> Enum.reverse()
@@ -214,15 +255,29 @@ defmodule Brainworms.Display do
       Enum.drop(list, start_index + length(new_sublist))
   end
 
-  def scale_activations(activations) do
-    [input, dense_0, hidden_0, dense_1, output] = activations
+  def scale_activations(%{
+        input: input,
+        dense_0: dense_0,
+        hidden_0: hidden_0,
+        dense_1: dense_1,
+        output: output
+      }) do
+    %{
+      input: input,
+      dense_0: Enum.map(dense_0, &(&1 * 0.5 + 0.5)),
+      hidden_0: Enum.map(hidden_0, &(&1 * 0.5 + 0.5)),
+      dense_1: Enum.map(dense_1, &(&1 * 0.5 + 0.5)),
+      output: Enum.map(output, &(&1 * 3))
+    }
+  end
 
-    [
-      input,
-      Enum.map(dense_0, &(&1 * 0.5 + 0.5)),
-      Enum.map(hidden_0, &(&1 * 0.5 + 0.5)),
-      Enum.map(dense_1, &(&1 * 0.5 + 0.5)),
-      Enum.map(output, &(&1 * 3))
-    ]
+  ## client API
+
+  def update(activations) do
+    GenServer.cast(__MODULE__, {:update, activations})
+  end
+
+  def demo(type) do
+    Process.send(__MODULE__, {:demo, type}, [])
   end
 end
