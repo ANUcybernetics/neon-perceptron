@@ -271,8 +271,8 @@ defmodule Brainworms.Display do
   end
 
   defp pulse_negatives(brightness_list) do
-    amp = 0.2
-    freq = 0.5
+    amp = 0.05
+    freq = 10.0
     t = Utils.float_now()
 
     brightness_list

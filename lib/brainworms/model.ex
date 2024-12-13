@@ -16,7 +16,7 @@ defmodule Brainworms.Model do
   # how often to print summary stats to the log (disable for prod)
   @training_log_interval 5_000
   # in steps (need to tweak once we're on the board)
-  @display_update_interval 10
+  @display_update_interval 1
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
