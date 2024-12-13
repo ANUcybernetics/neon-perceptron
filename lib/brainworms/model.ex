@@ -12,7 +12,7 @@ defmodule Brainworms.Model do
   """
 
   # how often to print summary stats to the log (disable for prod)
-  @training_log_interval 1_000
+  @training_log_interval 5_000
   # in steps (need to tweak once we're on the board)
   @display_update_interval 100
 
@@ -81,7 +81,7 @@ defmodule Brainworms.Model do
   end
 
   @impl true
-  def handle_call({:calc_layer_activations, :input, input}, _from, state) do
+  def handle_cast({:calc_layer_activations, :input, input}, state) do
     kernel = get_kernel(state.step_state.model_state, "dense_0")
 
     # this is a bit "fake", because we ignore the bias
@@ -94,12 +94,14 @@ defmodule Brainworms.Model do
       # |> Nx.flatten()
       |> Nx.to_flat_list()
 
-    activations = Map.merge(state.activations, %{input: input, dense_0: dense_0_activations})
-    {:reply, :ok, %{state | activations: activations}}
+    activations =
+      Map.merge(state.activations, %{input: Nx.to_flat_list(input), dense_0: dense_0_activations})
+
+    {:noreply, %{state | activations: activations}}
   end
 
   @impl true
-  def handle_call({:calc_layer_activations, :hidden_0, hidden_0}, _from, state) do
+  def handle_cast({:calc_layer_activations, :hidden_0, hidden_0}, state) do
     kernel = get_kernel(state.step_state.model_state, "dense_1")
 
     # this is a bit "fake", because we ignore the bias
@@ -114,16 +116,18 @@ defmodule Brainworms.Model do
       |> Nx.to_flat_list()
 
     activations =
-      Map.merge(state.activations, %{hidden_0: hidden_0, dense_1: dense_1_activations})
+      Map.merge(state.activations, %{
+        hidden_0: Nx.to_flat_list(hidden_0),
+        dense_1: dense_1_activations
+      })
 
-    {:reply, :ok, %{state | activations: activations}}
+    {:noreply, %{state | activations: activations}}
   end
 
   @impl true
-  def handle_call({:calc_layer_activations, :output, output}, _from, state) do
-    activations = Map.merge(state.activations, %{output: output})
-    dbg(activations)
-    {:reply, :ok, %{state | activations: activations}}
+  def handle_cast({:calc_layer_activations, :output, output}, state) do
+    activations = Map.merge(state.activations, %{output: Nx.to_flat_list(output)})
+    {:noreply, %{state | activations: activations}}
   end
 
   @impl true
@@ -172,7 +176,8 @@ defmodule Brainworms.Model do
     Axon.attach_hook(
       model,
       fn value ->
-        GenServer.call(__MODULE__, {:calc_layer_activations, layer, value})
+        # has to be a cast, because a Call will block (resulting in deadlock)
+        GenServer.cast(__MODULE__, {:calc_layer_activations, layer, value})
       end,
       on: :forward,
       mode: :inference
@@ -313,8 +318,8 @@ defmodule Brainworms.Model do
     )
   end
 
-  def activations(input) do
-    GenServer.call(__MODULE__, {:activations, input})
+  def activations() do
+    GenServer.call(__MODULE__, :activations)
   end
 
   def predict(input) do
