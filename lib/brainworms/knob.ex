@@ -100,7 +100,7 @@ defmodule Brainworms.Knob do
   @impl true
   def handle_call(:position, _from, state) do
     # normalise (i.e. remove the factor of 4 inherent to rotary encoders)
-    {:reply, div(state.position, 4), state}
+    {:reply, Integer.floor_div(state.position, 4), state}
   end
 
   def position do
