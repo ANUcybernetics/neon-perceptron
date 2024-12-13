@@ -244,9 +244,7 @@ defmodule Brainworms.Model do
   end
 
   def print_param_summary(step_state, activations) do
-    input = List.duplicate(1.0, 7)
-
-    %{dense_0: dense_0, hidden_0: hidden_0, dense_1: dense_1, output: softmax_0} =
+    %{input: input, dense_0: dense_0, hidden_0: hidden_0, dense_1: dense_1, output: softmax_0} =
       activations
 
     IO.puts("\nIteration: #{Nx.to_number(step_state.i)}")
@@ -269,9 +267,7 @@ defmodule Brainworms.Model do
     |> then(&"Accuracy: #{&1}%")
     |> IO.puts()
 
-    IO.puts(
-      "  Input: min=#{Float.round(Enum.min(input), 2)}, max=#{Float.round(Enum.max(input), 2)}"
-    )
+    IO.puts("  Input: min=#{Enum.min(input)}, max=#{Enum.max(input)}")
 
     IO.puts(
       "  Dense 0: min=#{Float.round(Enum.min(dense_0), 2)}, max=#{Float.round(Enum.max(dense_0), 2)}"
