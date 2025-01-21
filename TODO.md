@@ -1,5 +1,9 @@
 # TODO
 
+- change name to NeonPerceptron (perhaps John Mayer logo?)
+
+- use the "bias: false" argument (or whatever it's called)
+
 - find out if there's a better way to get the activations from Axon
 
 - set up different Supervisor trees for different targets (in particular, create
