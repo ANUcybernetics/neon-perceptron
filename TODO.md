@@ -1,5 +1,7 @@
 # TODO
 
+- Brendan: touchscreen & digital twin research for neonperceptron
+
 - change name to NeonPerceptron (perhaps John Mayer logo?)
 
 - use the "bias: false" argument (or whatever it's called)
