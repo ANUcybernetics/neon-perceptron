@@ -28,8 +28,10 @@ we'll use Phoenix LiveView with the Nerves Web Kiosk system.
 
 2. Add Phoenix LiveView application
 
-   - create poncho-style project structure (separate firmware and Phoenix apps)
-   - configure Phoenix to run on Nerves
+   - use single unified application structure (Nerves + Phoenix in one project)
+   - follow the `hello_live_view` example pattern with `lib/app` and
+     `lib/app_web`
+   - configure Phoenix to run on Nerves with single supervision tree
    - set up minimal web server (likely using Bandit or Cowboy)
    - configure LiveView for local network access
 
