@@ -1,4 +1,5 @@
-To use mix in this project prefix it with `mise exec`.
+To use mix in this project prefix it with `mise exec`, e.g.
+`mise exec -- mix test`.
 
 <!-- usage-rules-start -->
 <!-- usage-rules-header -->
