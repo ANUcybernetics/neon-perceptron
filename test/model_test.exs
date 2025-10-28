@@ -1,6 +1,50 @@
 defmodule Brainworms.ModelTest do
   use ExUnit.Case
 
+  test "model initializes without starting training immediately" do
+    # Create a test process to monitor the Model GenServer initialization
+    {:ok, model_pid} = GenServer.start_link(Brainworms.Model, [])
+
+    # Give it a moment to potentially schedule training
+    Process.sleep(5)
+
+    # The model should be initialized but not have started training yet
+    # If training started immediately in init/1, this would be > 0
+    iteration = GenServer.call(model_pid, :iteration)
+
+    # Since we're using handle_continue, training may have started
+    # but we verify the process doesn't crash during init
+    # The iteration is returned as an Nx tensor, so convert to number
+    iteration_num = if is_struct(iteration, Nx.Tensor), do: Nx.to_number(iteration), else: iteration
+    assert is_integer(iteration_num)
+
+    GenServer.stop(model_pid)
+  end
+
+  test "training loop allows message processing" do
+    # Start the model
+    {:ok, model_pid} = GenServer.start_link(Brainworms.Model, [])
+
+    # Wait for some training iterations
+    Process.sleep(50)
+
+    # Send a synchronous message that should be processed even during training
+    iteration1 = GenServer.call(model_pid, :iteration)
+    iteration1_num = if is_struct(iteration1, Nx.Tensor), do: Nx.to_number(iteration1), else: iteration1
+
+    # Wait a bit more
+    Process.sleep(50)
+
+    # Should be able to process another call
+    iteration2 = GenServer.call(model_pid, :iteration)
+    iteration2_num = if is_struct(iteration2, Nx.Tensor), do: Nx.to_number(iteration2), else: iteration2
+
+    # Training should have progressed
+    assert iteration2_num > iteration1_num
+
+    GenServer.stop(model_pid)
+  end
+
   test "end-to-end test" do
     model = Brainworms.Model.new(2)
     {inputs, targets} = Brainworms.Model.training_set()

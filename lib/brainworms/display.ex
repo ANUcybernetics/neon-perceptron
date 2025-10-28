@@ -10,34 +10,41 @@ defmodule Brainworms.Display do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-  @type state :: %{spi: %Circuits.SPI.SPIDev{}}
+  @type state :: %{spi: %Circuits.SPI.SPIDev{} | nil, mode: :hardware | :simulation}
 
   @spec init(:ok) :: {:ok, state()}
   @impl true
   def init(:ok) do
-    {:ok, spi} = Circuits.SPI.open("spidev0.0")
-    {:ok, %{spi: spi}}
+    case Circuits.SPI.open("spidev0.0") do
+      {:ok, spi} ->
+        {:ok, %{spi: spi, mode: :hardware}}
+
+      {:error, reason} ->
+        require Logger
+        Logger.warning("SPI hardware unavailable (#{inspect(reason)}), running in simulation mode")
+        {:ok, %{spi: nil, mode: :simulation}}
+    end
   end
 
   @impl true
   def handle_cast({:update, activations}, state) do
     activations
     |> scale_activations()
-    |> then(&set_activations(state.spi, &1))
+    |> then(&set_activations(state.spi, state.mode, &1))
 
     {:noreply, state}
   end
 
   @impl true
   def handle_info({:demo, :layer}, state) do
-    layer_demo(state.spi)
+    layer_demo(state.spi, state.mode)
     Process.send_after(self(), {:demo, :layer}, 10)
     {:noreply, state}
   end
 
   @impl true
   def handle_info({:demo, :breathe}, state) do
-    breathe_demo(state.spi)
+    breathe_demo(state.spi, state.mode)
     Process.send_after(self(), {:demo, :breathe}, 10)
     {:noreply, state}
   end
@@ -120,7 +127,7 @@ defmodule Brainworms.Display do
     end)
   end
 
-  def set_activations(spi_bus, %{
+  def set_activations(spi_bus, mode, %{
         input: seven_segment,
         dense_0: dense_0,
         hidden_0: hidden_0,
@@ -139,7 +146,10 @@ defmodule Brainworms.Display do
       |> pulse_negatives()
       |> Utils.pwm_encode()
 
-    Circuits.SPI.transfer!(spi_bus, data)
+    case mode do
+      :hardware -> Circuits.SPI.transfer!(spi_bus, data)
+      :simulation -> :ok
+    end
   end
 
   @doc """
@@ -148,8 +158,9 @@ defmodule Brainworms.Display do
 
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
+    mode: :hardware or :simulation
   """
-  def breathe_demo(spi_bus) do
+  def breathe_demo(spi_bus, mode) do
     data =
       Range.new(1, 24 * @pwm_controller_count)
       |> Enum.map(fn x -> 0.5 + 0.5 * Utils.osc(0.1 * 0.5 * Integer.mod(x, 19)) end)
@@ -157,7 +168,10 @@ defmodule Brainworms.Display do
       |> Enum.reverse()
       |> Utils.pwm_encode()
 
-    Circuits.SPI.transfer!(spi_bus, data)
+    case mode do
+      :hardware -> Circuits.SPI.transfer!(spi_bus, data)
+      :simulation -> :ok
+    end
   end
 
   @doc """
@@ -166,8 +180,9 @@ defmodule Brainworms.Display do
 
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
+    mode: :hardware or :simulation
   """
-  def layer_demo(spi_bus) do
+  def layer_demo(spi_bus, mode) do
     layer = System.os_time(:second) |> Integer.mod(5)
     zeroes = List.duplicate(0, 24 * @pwm_controller_count)
 
@@ -192,7 +207,10 @@ defmodule Brainworms.Display do
       |> Enum.reverse()
       |> Utils.pwm_encode()
 
-    Circuits.SPI.transfer!(spi_bus, data)
+    case mode do
+      :hardware -> Circuits.SPI.transfer!(spi_bus, data)
+      :simulation -> :ok
+    end
   end
 
   @doc """
@@ -200,8 +218,9 @@ defmodule Brainworms.Display do
 
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
+    mode: :hardware or :simulation
   """
-  def step_demo(spi_bus) do
+  def step_demo(spi_bus, mode) do
     second = System.os_time(:second) |> Integer.mod(24 * @pwm_controller_count)
 
     data =
@@ -211,7 +230,10 @@ defmodule Brainworms.Display do
       |> Enum.reverse()
       |> Utils.pwm_encode()
 
-    Circuits.SPI.transfer!(spi_bus, data)
+    case mode do
+      :hardware -> Circuits.SPI.transfer!(spi_bus, data)
+      :simulation -> :ok
+    end
   end
 
   @doc """
@@ -219,10 +241,11 @@ defmodule Brainworms.Display do
 
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
+    mode: :hardware or :simulation
     index: Index of the PWM channel to set (0-71)
     value: Value to set the PWM channel to between 0 and 1
   """
-  def set_one(spi_bus, index, value) do
+  def set_one(spi_bus, mode, index, value) do
     data =
       List.duplicate(0, 24 * @pwm_controller_count)
       |> List.replace_at(index, value)
@@ -230,7 +253,10 @@ defmodule Brainworms.Display do
       |> Enum.reverse()
       |> Utils.pwm_encode()
 
-    Circuits.SPI.transfer!(spi_bus, data)
+    case mode do
+      :hardware -> Circuits.SPI.transfer!(spi_bus, data)
+      :simulation -> :ok
+    end
   end
 
   @doc """
@@ -238,16 +264,19 @@ defmodule Brainworms.Display do
 
   Params:
     spi_bus: The SPI bus instance for communication with PWM controllers
+    mode: :hardware or :simulation
     value: Value to set all PWM channels to between 0 and 1
   """
-  def set_all(spi_bus, value) do
+  def set_all(spi_bus, mode, value) do
     data =
       value
       |> List.duplicate(24 * @pwm_controller_count)
       |> Utils.pwm_encode()
 
-    Circuits.SPI.transfer!(spi_bus, data)
-    :ok
+    case mode do
+      :hardware -> Circuits.SPI.transfer!(spi_bus, data)
+      :simulation -> :ok
+    end
   end
 
   def replace_sublist(list, start_index, new_sublist) do

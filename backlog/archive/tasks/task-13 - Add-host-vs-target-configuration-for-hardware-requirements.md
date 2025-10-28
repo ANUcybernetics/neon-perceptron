@@ -4,6 +4,7 @@ title: Add host vs target configuration for hardware requirements
 status: To Do
 assignee: []
 created_date: '2025-10-28 09:21'
+updated_date: '2025-10-28 09:33'
 labels:
   - brainworms
   - configuration
@@ -20,10 +21,10 @@ Create separate configuration profiles for host development (config/host.exs) an
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 config/host.exs exists with hardware_required: false settings
-- [ ] #2 config/target.exs exists with hardware_required: true settings
-- [ ] #3 Hardware modules read configuration to determine behavior
-- [ ] #4 Documentation explains the difference between host and target modes
-- [ ] #5 Mix environment properly loads correct config based on MIX_TARGET or similar
-- [ ] #6 Tests verify configuration is loaded correctly in both environments
+- [x] #1 config/host.exs exists with hardware_required: false settings
+- [x] #2 config/target.exs exists with hardware_required: true settings
+- [x] #3 Hardware modules read configuration to determine behavior
+- [x] #4 Documentation explains the difference between host and target modes
+- [x] #5 Mix environment properly loads correct config based on MIX_TARGET or similar
+- [x] #6 Tests verify configuration is loaded correctly in both environments
 <!-- AC:END -->

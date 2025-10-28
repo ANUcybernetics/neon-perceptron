@@ -6,6 +6,11 @@ import Config
 # See task-1 for details
 # config :nx, default_backend: EXLA.Backend
 
+# Hardware configuration for host environment (development/testing)
+# When running on host, hardware is typically not available, so modules
+# should gracefully degrade to simulation mode
+config :brainworms, hardware_required: false
+
 config :nerves_runtime,
   kv_backend:
     {Nerves.Runtime.KVBackend.InMemory,

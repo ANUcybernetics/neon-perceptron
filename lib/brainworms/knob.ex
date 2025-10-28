@@ -46,6 +46,11 @@ defmodule Brainworms.Knob do
 
   # Handler for GPIO17 (Pin A)
   @impl true
+  def handle_info({:circuits_gpio, "GPIO17", _timestamp, _value}, %{pin_b: nil} = state) do
+    Logger.warning("Received GPIO interrupt but hardware not available, ignoring")
+    {:noreply, state}
+  end
+
   def handle_info({:circuits_gpio, "GPIO17", _timestamp, value}, state) do
     new_position =
       determine_direction(
@@ -61,6 +66,11 @@ defmodule Brainworms.Knob do
 
   # Handler for GPIO18 (Pin B)
   @impl true
+  def handle_info({:circuits_gpio, "GPIO18", _timestamp, _value}, %{pin_a: nil} = state) do
+    Logger.warning("Received GPIO interrupt but hardware not available, ignoring")
+    {:noreply, state}
+  end
+
   def handle_info({:circuits_gpio, "GPIO18", _timestamp, value}, state) do
     new_position =
       determine_direction(

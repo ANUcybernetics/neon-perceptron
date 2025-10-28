@@ -41,8 +41,6 @@ defmodule Brainworms.Model do
     {_, predict_fn} = Axon.build(model)
     step_state = init_fn.(training_data, Axon.ModelState.empty())
 
-    schedule_training_step()
-
     {:ok,
      %{
        model: model,
@@ -52,7 +50,13 @@ defmodule Brainworms.Model do
        predict_fn: predict_fn,
        step_state: step_state,
        activations: null_activations()
-     }}
+     }, {:continue, :start_training}}
+  end
+
+  @impl true
+  def handle_continue(:start_training, state) do
+    schedule_training_step()
+    {:noreply, state}
   end
 
   @impl true
@@ -309,7 +313,7 @@ defmodule Brainworms.Model do
   end
 
   defp schedule_training_step() do
-    Process.send_after(self(), :train_step, 0)
+    Process.send_after(self(), :train_step, 1)
   end
 
   def null_activations() do

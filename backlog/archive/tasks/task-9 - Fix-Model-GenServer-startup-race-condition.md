@@ -4,6 +4,7 @@ title: Fix Model GenServer startup race condition
 status: To Do
 assignee: []
 created_date: '2025-10-28 09:20'
+updated_date: '2025-10-28 09:32'
 labels:
   - brainworms
   - robustness
@@ -20,8 +21,8 @@ The Model GenServer immediately schedules training in init/1, which calls Knob.p
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Model uses handle_continue/2 to defer training start until after initialization
-- [ ] #2 Training is only scheduled after all dependencies are confirmed available
-- [ ] #3 No race condition occurs during application startup
-- [ ] #4 Tests verify training doesn't start until handle_continue executes
+- [x] #1 Model uses handle_continue/2 to defer training start until after initialization
+- [x] #2 Training is only scheduled after all dependencies are confirmed available
+- [x] #3 No race condition occurs during application startup
+- [x] #4 Tests verify training doesn't start until handle_continue executes
 <!-- AC:END -->

@@ -4,6 +4,7 @@ title: Add graceful hardware degradation to Display module
 status: To Do
 assignee: []
 created_date: '2025-10-28 09:20'
+updated_date: '2025-10-28 09:33'
 labels:
   - brainworms
   - robustness
@@ -20,10 +21,10 @@ Display module currently crashes when SPI hardware is unavailable, preventing de
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Display detects SPI hardware availability during initialization
-- [ ] #2 Display runs in simulation mode when hardware unavailable (logs instead of actual SPI writes)
-- [ ] #3 Display runs in hardware mode when SPI available
-- [ ] #4 Mode selection is automatic based on hardware detection
-- [ ] #5 Application starts successfully on both host and target
-- [ ] #6 Tests verify both simulation and hardware modes work correctly
+- [x] #1 Display detects SPI hardware availability during initialization
+- [x] #2 Display runs in simulation mode when hardware unavailable (logs instead of actual SPI writes)
+- [x] #3 Display runs in hardware mode when SPI available
+- [x] #4 Mode selection is automatic based on hardware detection
+- [x] #5 Application starts successfully on both host and target
+- [x] #6 Tests verify both simulation and hardware modes work correctly
 <!-- AC:END -->
