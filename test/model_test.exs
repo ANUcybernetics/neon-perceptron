@@ -45,6 +45,9 @@ defmodule Brainworms.ModelTest do
     GenServer.stop(model_pid)
   end
 
+  # note: this test can be flaky due to the stochastic nature of training
+  # a small 2-hidden-unit network may not always achieve perfect accuracy
+  # on all 10 digits after 1000 epochs with random initialization
   test "end-to-end test" do
     model = Brainworms.Model.new(2)
     {inputs, targets} = Brainworms.Model.training_set()

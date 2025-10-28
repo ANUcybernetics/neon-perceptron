@@ -332,4 +332,75 @@ defmodule Brainworms.Model do
     state.predict_fn.(state.step_state.model_state, batched_input)
     |> Nx.to_flat_list()
   end
+
+  @doc """
+  Run single-shot inference for a trained model.
+
+  Intended use:
+  - `model` comes from `new/1`
+  - `params` comes from `train/2`
+
+  For a given `digit` 0-9, return the predicted class distribution under `model`.
+  """
+  def predict(model, params, digit) do
+    input = Utils.digit_to_bitlist(digit) |> Nx.tensor() |> Nx.new_axis(0)
+    {_init_fn, predict_fn} = Axon.build(model)
+    predict_fn.(params, input)
+  end
+
+  @doc """
+  Run single-shot inference for a trained model and return the most likely digit class.
+
+  Intended use:
+  - `model` comes from `new/1`
+  - `params` comes from `train/2`
+
+  For a given `digit` 0-9, return the predicted digit class (0-9) under `model`.
+  """
+  def predict_class(model, params, digit) do
+    model
+    |> predict(params, digit)
+    |> Nx.argmax(axis: 1)
+    |> Nx.to_flat_list()
+    |> List.first()
+  end
+
+  @doc """
+  Calculate layer activations manually from model state.
+
+  This is a somewhat hacky way to extract intermediate layer activations. There's probably a
+  nicer and more general way to get this info out of Axon (e.g. `Axon.build/2` with `print_values: true`
+  will print some of the right values) but I haven't found it yet.
+
+  Used to map neural network calculations to wire brightness values for visualization.
+  """
+  def activations_from_model_state(model_state, input) do
+    weights = Map.get(model_state, :data)
+
+    %{
+      "dense_0" => %{"bias" => _bias_0, "kernel" => kernel_0},
+      "dense_1" => %{"bias" => _bias_1, "kernel" => kernel_1}
+    } = weights
+
+    input_vector = Nx.tensor(input, type: :f32)
+
+    activations_dense_0 =
+      input_vector |> Nx.new_axis(1) |> Nx.multiply(kernel_0)
+
+    tanh_0 = activations_dense_0 |> Nx.sum(axes: [0]) |> Nx.tanh()
+
+    activations_dense_1 =
+      tanh_0 |> Nx.new_axis(1) |> Nx.multiply(kernel_1)
+
+    softmax_0 = activations_dense_1 |> Nx.sum(axes: [0]) |> Axon.Activations.softmax()
+
+    [
+      input_vector,
+      activations_dense_0,
+      tanh_0,
+      activations_dense_1,
+      softmax_0
+    ]
+    |> Enum.map(fn tensor -> Nx.to_flat_list(tensor) end)
+  end
 end
