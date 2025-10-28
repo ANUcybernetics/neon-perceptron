@@ -44,7 +44,7 @@ defmodule Brainworms.MixProject do
 
       # AI stuff
       {:axon, "~> 0.7"},
-      # {:exla, "~> 0.9"},  # Disabled due to C++ compiler compatibility issues on macOS
+      {:exla, "~> 0.10.0"},
 
       # Development tools
       {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},

@@ -2,9 +2,7 @@ import Config
 
 # Add configuration that is only needed when running on the host here.
 
-# EXLA backend disabled due to compatibility issues with C++ compiler on macOS
-# See task-1 for details
-# config :nx, default_backend: EXLA.Backend
+config :nx, default_backend: EXLA.Backend
 
 # Hardware configuration for host environment (development/testing)
 # When running on host, hardware is typically not available, so modules
