@@ -4,10 +4,9 @@ A Nerves-based Elixir project that combines neural network operation (via Axon)
 with hardware control of PWM-driven LED strips. Running on a reTerminal DM /
 Raspberry Pi CM4 (64-bit).
 
-## Mix commands
+## Testing
 
-To use mix in this project prefix it with `mise exec`, e.g.
-`mise exec -- mix test`. Tests run on the `:host` target by default.
+Run the tests with `mix test`. Tests run on the `:host` target by default.
 
 <!-- usage-rules-start -->
 <!-- usage-rules-header -->
