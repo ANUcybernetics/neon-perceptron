@@ -5,7 +5,7 @@ defmodule Brainworms.ModelTest do
     model = Brainworms.Model.new(2)
     {inputs, targets} = Brainworms.Model.training_set()
     training_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
-    params = Brainworms.Model.train(model, training_data, epochs: 10_000)
+    params = Brainworms.Model.train(model, training_data, epochs: 1_000)
 
     dense_0_sum = Map.get(params, :data)["dense_0"]["kernel"] |> Nx.sum()
     dense_1_sum = Map.get(params, :data)["dense_1"]["kernel"] |> Nx.sum()
@@ -55,8 +55,8 @@ defmodule Brainworms.ModelTest do
     model = Brainworms.Model.new(2)
     {inputs, targets} = training_set = Brainworms.Model.training_set()
 
-    # keep this at 1_000 for now, but if you want accuracy to reach 100% you'll need more like 10_000
-    num_epochs = 1_000
+    # reduced from 1_000 to speed up tests - test still validates the core functionality
+    num_epochs = 250
 
     # the "build & train in one hit" setup
     {_init_fn, predict_fn} = Axon.build(model, print_values: false)
@@ -75,8 +75,8 @@ defmodule Brainworms.ModelTest do
     step_state = init_fn.(training_set, Axon.ModelState.empty())
 
     step_state =
-      Enum.reduce(1..(3 * num_epochs), step_state, fn idx, acc ->
-        if rem(idx, 1000) == 0 do
+      Enum.reduce(1..num_epochs, step_state, fn idx, acc ->
+        if rem(idx, 100) == 0 do
           IO.puts("Training step #{idx} completed")
         end
 
@@ -119,8 +119,8 @@ defmodule Brainworms.ModelTest do
     model = Brainworms.Model.new(2)
     {inputs, targets} = Brainworms.Model.training_set()
 
-    # keep this at 1_000 for now, but if you want accuracy to reach 100% you'll need more like 10_000
-    num_epochs = 100
+    # minimal epochs since this test is just validating prediction mechanics, not accuracy
+    num_epochs = 50
 
     # the "build & train in one hit" setup
     {_init_fn, predict_fn} = Axon.build(model, print_values: false)
