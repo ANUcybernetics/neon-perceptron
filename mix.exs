@@ -10,7 +10,7 @@ defmodule Brainworms.MixProject do
       app: @app,
       version: @version,
       elixir: "~> 1.17",
-      archives: [nerves_bootstrap: "~> 1.13"],
+      archives: [nerves_bootstrap: "~> 1.14"],
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       releases: [{@app, release()}],
@@ -30,16 +30,16 @@ defmodule Brainworms.MixProject do
   defp deps do
     [
       # Dependencies for all targets
-      {:nerves, "~> 1.10", runtime: false},
-      {:shoehorn, "~> 0.9.1"},
-      {:ring_logger, "~> 0.11.0"},
-      {:toolshed, "~> 0.4.0"},
+      {:nerves, "~> 1.11", runtime: false},
+      {:shoehorn, "~> 0.9.3"},
+      {:ring_logger, "~> 0.11.4"},
+      {:toolshed, "~> 0.4.2"},
       {:req, "~> 0.5"},
 
       # might not need all of these, can thin out later
-      {:circuits_uart, "~> 1.3"},
-      {:circuits_gpio, "~> 2.0"},
-      {:circuits_i2c, "~> 2.0"},
+      {:circuits_uart, "~> 1.5"},
+      {:circuits_gpio, "~> 2.1"},
+      {:circuits_i2c, "~> 2.1"},
       {:circuits_spi, "~> 2.0"},
 
       # AI stuff
@@ -48,7 +48,7 @@ defmodule Brainworms.MixProject do
 
       # Allow Nerves.Runtime on host to support development, testing and CI.
       # See config/host.exs for usage.
-      {:nerves_runtime, "~> 0.13.0"},
+      {:nerves_runtime, "~> 0.13.9"},
 
       # Dependencies for all targets except :host
       {:nerves_pack, "~> 0.7.1", targets: @all_targets},
@@ -58,7 +58,7 @@ defmodule Brainworms.MixProject do
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
       # version updates, please review their release notes in case
       # changes to your application are needed.
-      {:nerves_system_rpi4, "~> 1.24", runtime: false, targets: :rpi4}
+      {:nerves_system_rpi4, "~> 1.31", runtime: false, targets: :rpi4}
     ]
   end
 
