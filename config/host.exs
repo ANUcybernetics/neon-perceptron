@@ -2,6 +2,10 @@ import Config
 
 # Add configuration that is only needed when running on the host here.
 
+# EXLA backend disabled due to compatibility issues with C++ compiler on macOS
+# See task-1 for details
+# config :nx, default_backend: EXLA.Backend
+
 config :nerves_runtime,
   kv_backend:
     {Nerves.Runtime.KVBackend.InMemory,
