@@ -46,6 +46,10 @@ defmodule Brainworms.MixProject do
       {:axon, "~> 0.7"},
       # {:exla, "~> 0.8"},
 
+      # Development tools
+      {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},
+      {:usage_rules, "~> 0.1", only: [:dev, :test], runtime: false},
+
       # Allow Nerves.Runtime on host to support development, testing and CI.
       # See config/host.exs for usage.
       {:nerves_runtime, "~> 0.13.9"},
