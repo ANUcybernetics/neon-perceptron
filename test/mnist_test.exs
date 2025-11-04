@@ -3,6 +3,7 @@ defmodule NeonPerceptron.MNISTTest do
 
   @moduletag :mnist
   @moduletag timeout: 600_000
+  @epochs 20
 
   test "train MNIST models with varying hidden layer sizes" do
     {train_data, test_data} = load_mnist_data()
@@ -10,7 +11,7 @@ defmodule NeonPerceptron.MNISTTest do
     results =
       for m <- 9..25 do
         model = create_model(m)
-        trained_params = train_model(model, train_data, epochs: 10, batch_size: 128)
+        trained_params = train_model(model, train_data, epochs: @epochs, batch_size: 128)
         accuracy = calculate_accuracy(model, trained_params, test_data)
         {m, accuracy}
       end
@@ -92,7 +93,7 @@ defmodule NeonPerceptron.MNISTTest do
   end
 
   defp train_model(model, train_data, opts) do
-    epochs = Keyword.get(opts, :epochs, 10)
+    epochs = Keyword.fetch!(opts, :epochs)
     batch_size = Keyword.get(opts, :batch_size, 128)
     learning_rate = Keyword.get(opts, :learning_rate, 0.005)
 
