@@ -37,47 +37,44 @@ defmodule NeonPerceptron.MNISTTest do
     {{train_images_binary, train_images_type, train_images_shape},
      {train_labels_binary, train_labels_type, train_labels_shape}} = Scidata.MNIST.download()
 
-    train_images =
-      train_images_binary
-      |> Nx.from_binary(train_images_type)
-      |> Nx.reshape(train_images_shape)
-      |> Nx.as_type(:f32)
+    {{test_images_binary, test_images_type, test_images_shape},
+     {test_labels_binary, test_labels_type, test_labels_shape}} = Scidata.MNIST.download_test()
 
-    train_labels =
-      train_labels_binary
-      |> Nx.from_binary(train_labels_type)
-      |> Nx.reshape(train_labels_shape)
-      |> Nx.as_type(:s64)
+    train_images = process_images(train_images_binary, train_images_type, train_images_shape)
+    train_labels = process_labels(train_labels_binary, train_labels_type, train_labels_shape)
 
-    train_images =
-      train_images
-      |> Nx.squeeze(axes: [1])
-      |> resize_images_to_5x5()
-      |> Nx.reshape({:auto, 25})
+    test_images = process_images(test_images_binary, test_images_type, test_images_shape)
+    test_labels = process_labels(test_labels_binary, test_labels_type, test_labels_shape)
 
-    train_images = Nx.divide(train_images, 255.0)
+    train_data = {train_images, train_labels}
+    test_data = {test_images, test_labels}
 
-    train_labels_one_hot =
+    {train_data, test_data}
+  end
+
+  defp process_images(images_binary, images_type, images_shape) do
+    images_binary
+    |> Nx.from_binary(images_type)
+    |> Nx.reshape(images_shape)
+    |> Nx.as_type(:f32)
+    |> Nx.squeeze(axes: [1])
+    |> resize_images_to_5x5()
+    |> Nx.reshape({:auto, 25})
+    |> Nx.divide(255.0)
+  end
+
+  defp process_labels(labels_binary, labels_type, labels_shape) do
+    labels_binary
+    |> Nx.from_binary(labels_type)
+    |> Nx.reshape(labels_shape)
+    |> Nx.as_type(:s64)
+    |> then(fn labels ->
       Nx.equal(
-        Nx.new_axis(train_labels, -1),
+        Nx.new_axis(labels, -1),
         Nx.tensor(Enum.to_list(0..9))
       )
       |> Nx.as_type(:f32)
-
-    total_samples = Nx.axis_size(train_images, 0)
-    train_size = trunc(total_samples * 0.9)
-
-    train_data = {
-      Nx.slice_along_axis(train_images, 0, train_size, axis: 0),
-      Nx.slice_along_axis(train_labels_one_hot, 0, train_size, axis: 0)
-    }
-
-    test_data = {
-      Nx.slice_along_axis(train_images, train_size, total_samples - train_size, axis: 0),
-      Nx.slice_along_axis(train_labels_one_hot, train_size, total_samples - train_size, axis: 0)
-    }
-
-    {train_data, test_data}
+    end)
   end
 
   defp resize_images_to_5x5(images) do
