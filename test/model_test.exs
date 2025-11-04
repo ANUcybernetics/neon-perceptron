@@ -15,7 +15,9 @@ defmodule NeonPerceptron.ModelTest do
     # Since we're using handle_continue, training may have started
     # but we verify the process doesn't crash during init
     # The iteration is returned as an Nx tensor, so convert to number
-    iteration_num = if is_struct(iteration, Nx.Tensor), do: Nx.to_number(iteration), else: iteration
+    iteration_num =
+      if is_struct(iteration, Nx.Tensor), do: Nx.to_number(iteration), else: iteration
+
     assert is_integer(iteration_num)
 
     GenServer.stop(model_pid)
@@ -30,14 +32,18 @@ defmodule NeonPerceptron.ModelTest do
 
     # Send a synchronous message that should be processed even during training
     iteration1 = GenServer.call(model_pid, :iteration)
-    iteration1_num = if is_struct(iteration1, Nx.Tensor), do: Nx.to_number(iteration1), else: iteration1
+
+    iteration1_num =
+      if is_struct(iteration1, Nx.Tensor), do: Nx.to_number(iteration1), else: iteration1
 
     # Wait a bit more
     Process.sleep(50)
 
     # Should be able to process another call
     iteration2 = GenServer.call(model_pid, :iteration)
-    iteration2_num = if is_struct(iteration2, Nx.Tensor), do: Nx.to_number(iteration2), else: iteration2
+
+    iteration2_num =
+      if is_struct(iteration2, Nx.Tensor), do: Nx.to_number(iteration2), else: iteration2
 
     # Training should have progressed
     assert iteration2_num > iteration1_num

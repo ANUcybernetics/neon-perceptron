@@ -21,7 +21,11 @@ defmodule NeonPerceptron.Display do
 
       {:error, reason} ->
         require Logger
-        Logger.warning("SPI hardware unavailable (#{inspect(reason)}), running in simulation mode")
+
+        Logger.warning(
+          "SPI hardware unavailable (#{inspect(reason)}), running in simulation mode"
+        )
+
         {:ok, %{spi: nil, mode: :simulation}}
     end
   end

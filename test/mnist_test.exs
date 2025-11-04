@@ -24,7 +24,11 @@ defmodule NeonPerceptron.MNISTTest do
 
   defp create_model(hidden_size) do
     Axon.input("input", shape: {nil, 25})
-    |> Axon.dense(hidden_size, activation: :relu, use_bias: false, kernel_initializer: :glorot_uniform)
+    |> Axon.dense(hidden_size,
+      activation: :relu,
+      use_bias: false,
+      kernel_initializer: :glorot_uniform
+    )
     |> Axon.dense(10, use_bias: false, kernel_initializer: :glorot_uniform)
   end
 
@@ -74,14 +78,15 @@ defmodule NeonPerceptron.MNISTTest do
 
     {train_data, test_data}
   end
+
   defp resize_images_to_5x5(images) do
     # Use Lanczos3 for high-quality downsampling
     # NxImage expects shape {batch, height, width, channels}
     # MNIST images are {batch, height, width}, so add channel dimension
     images_with_channels = Nx.new_axis(images, -1)
-    
+
     resized = NxImage.resize(images_with_channels, {5, 5}, method: :lanczos3, channels: :last)
-    
+
     # Remove the channel dimension to get back to {batch, height, width}
     Nx.squeeze(resized, axes: [-1])
   end
@@ -100,7 +105,10 @@ defmodule NeonPerceptron.MNISTTest do
 
     loop =
       model
-      |> Axon.Loop.trainer(:mean_squared_error, Polaris.Optimizers.adam(learning_rate: learning_rate))
+      |> Axon.Loop.trainer(
+        :mean_squared_error,
+        Polaris.Optimizers.adam(learning_rate: learning_rate)
+      )
 
     Axon.Loop.run(loop, batched_data, %{}, epochs: epochs, compiler: EXLA)
   end
