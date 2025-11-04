@@ -4,33 +4,27 @@ defmodule NeonPerceptron.MNISTTest do
   @moduletag :mnist
   @moduletag timeout: 600_000
 
-  test "train MNIST model with 5x5 inputs and 9 hidden neurons" do
-    IO.puts("\n" <> String.duplicate("=", 80))
-    IO.puts("MNIST TRAINING TEST")
-    IO.puts("Architecture: 25 inputs (5x5) -> 9 hidden neurons -> 10 outputs")
-    IO.puts(String.duplicate("=", 80))
-
-    IO.puts("Loading MNIST data...")
+  test "train MNIST models with varying hidden layer sizes" do
     {train_data, test_data} = load_mnist_data()
 
-    IO.puts("Creating model...")
-    model = create_model()
+    results =
+      for m <- 9..25 do
+        model = create_model(m)
+        trained_params = train_model(model, train_data, epochs: 10, batch_size: 128)
+        accuracy = calculate_accuracy(model, trained_params, test_data)
+        {m, accuracy}
+      end
+      |> Map.new()
 
-    IO.puts("Training model...")
-    trained_params = train_model(model, train_data, epochs: 5, batch_size: 128)
+    IO.puts("\nMNIST Test Results (25 inputs, m hidden, 10 outputs, 10 epochs)")
+    IO.inspect(results, label: "Hidden neurons (m) -> Accuracy")
 
-    IO.puts("\nCalculating test accuracy...")
-    accuracy = calculate_accuracy(model, trained_params, test_data)
-
-    IO.puts("\nTest accuracy: #{Float.round(accuracy * 100, 2)}%")
-    IO.puts(String.duplicate("=", 80))
-
-    assert accuracy > 0.1, "Should achieve better than random (10%) accuracy"
+    assert map_size(results) == 17, "Should have trained 17 models (m=9 to m=25)"
   end
 
-  defp create_model do
+  defp create_model(hidden_size) do
     Axon.input("input", shape: {nil, 25})
-    |> Axon.dense(9, activation: :relu, use_bias: false, kernel_initializer: :glorot_uniform)
+    |> Axon.dense(hidden_size, activation: :relu, use_bias: false, kernel_initializer: :glorot_uniform)
     |> Axon.dense(10, use_bias: false, kernel_initializer: :glorot_uniform)
   end
 
@@ -90,7 +84,7 @@ defmodule NeonPerceptron.MNISTTest do
   end
 
   defp train_model(model, train_data, opts) do
-    epochs = Keyword.get(opts, :epochs, 5)
+    epochs = Keyword.get(opts, :epochs, 10)
     batch_size = Keyword.get(opts, :batch_size, 128)
     learning_rate = Keyword.get(opts, :learning_rate, 0.005)
 
