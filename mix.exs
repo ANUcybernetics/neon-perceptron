@@ -46,6 +46,7 @@ defmodule NeonPerceptron.MixProject do
       {:axon, "~> 0.7"},
       {:exla, "~> 0.10.0"},
       {:scidata, "~> 0.1", only: :test},
+      {:nx_image, "~> 0.1.0", only: :test},
 
       # Development tools
       {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},

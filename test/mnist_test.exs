@@ -74,13 +74,16 @@ defmodule NeonPerceptron.MNISTTest do
 
     {train_data, test_data}
   end
-
   defp resize_images_to_5x5(images) do
-    indices = Nx.tensor([0, 6, 11, 17, 22])
-
-    images
-    |> Nx.take(indices, axis: 1)
-    |> Nx.take(indices, axis: 2)
+    # Use Lanczos3 for high-quality downsampling
+    # NxImage expects shape {batch, height, width, channels}
+    # MNIST images are {batch, height, width}, so add channel dimension
+    images_with_channels = Nx.new_axis(images, -1)
+    
+    resized = NxImage.resize(images_with_channels, {5, 5}, method: :lanczos3, channels: :last)
+    
+    # Remove the channel dimension to get back to {batch, height, width}
+    Nx.squeeze(resized, axes: [-1])
   end
 
   defp train_model(model, train_data, opts) do
@@ -98,9 +101,8 @@ defmodule NeonPerceptron.MNISTTest do
     loop =
       model
       |> Axon.Loop.trainer(:mean_squared_error, Polaris.Optimizers.adam(learning_rate: learning_rate))
-      |> Axon.Loop.metric(:accuracy)
 
-    Axon.Loop.run(loop, batched_data, %{}, epochs: epochs)
+    Axon.Loop.run(loop, batched_data, %{}, epochs: epochs, compiler: EXLA)
   end
 
   defp calculate_accuracy(model, trained_params, test_data) do
