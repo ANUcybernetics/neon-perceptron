@@ -10,13 +10,13 @@ defmodule NeonPerceptron.MNISTTest do
     results =
       for m <- 9..25 do
         model = create_model(m)
-        trained_params = train_model(model, train_data, epochs: 10, batch_size: 128)
+        trained_params = train_model(model, train_data, epochs: 5, batch_size: 128)
         accuracy = calculate_accuracy(model, trained_params, test_data)
         {m, accuracy}
       end
       |> Map.new()
 
-    IO.puts("\nMNIST Test Results (25 inputs, m hidden, 10 outputs, 10 epochs)")
+    IO.puts("\nMNIST Test Results (25 inputs, m hidden, 10 outputs, 5 epochs)")
     IO.inspect(results, label: "Hidden neurons (m) -> Accuracy")
 
     assert map_size(results) == 17, "Should have trained 17 models (m=9 to m=25)"
