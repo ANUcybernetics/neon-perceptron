@@ -1,3 +1,3 @@
-alias Brainworms.Display
-alias Brainworms.Knob
-alias Brainworms.Utils
+alias NeonPerceptron.Display
+alias NeonPerceptron.Knob
+alias NeonPerceptron.Utils

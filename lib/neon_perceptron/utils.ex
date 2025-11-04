@@ -1,4 +1,4 @@
-defmodule Brainworms.Utils do
+defmodule NeonPerceptron.Utils do
   @moduledoc """
   Data representation for both the 0-9 digits and the associated 7-segment bit patterns.
 
@@ -34,10 +34,10 @@ defmodule Brainworms.Utils do
 
   This function will raise if `digit` is not a single (0-9) digit.
 
-      iex> Brainworms.Utils.digit_to_bitlist!(1)
+      iex> NeonPerceptron.Utils.digit_to_bitlist!(1)
       [0, 0, 1, 0, 0, 1, 0]
 
-      iex> Brainworms.Utils.digit_to_bitlist!(5)
+      iex> NeonPerceptron.Utils.digit_to_bitlist!(5)
       [1, 1, 0, 1, 0, 1, 1]
   """
   def digit_to_bitlist(digit) when digit in 0..9 do
@@ -49,10 +49,10 @@ defmodule Brainworms.Utils do
 
   This function will raise if the bitlist doesn't correspond to a single (0-9) digit.
 
-      iex> Brainworms.Utils.bitlist_to_digit([1, 1, 1, 1, 1, 1, 1])
+      iex> NeonPerceptron.Utils.bitlist_to_digit([1, 1, 1, 1, 1, 1, 1])
       8
 
-      iex> Brainworms.Utils.bitlist_to_digit([1, 1, 0, 1, 0, 1, 1])
+      iex> NeonPerceptron.Utils.bitlist_to_digit([1, 1, 0, 1, 0, 1, 1])
       5
   """
   def bitlist_to_digit(bitlist) when is_list(bitlist) do
@@ -67,10 +67,10 @@ defmodule Brainworms.Utils do
 
   Useful for driving 7-segment displays, obviously :)
 
-      iex> Brainworms.Utils.integer_to_bitlist(5)
+      iex> NeonPerceptron.Utils.integer_to_bitlist(5)
       [0, 0, 0, 0, 1, 0, 1]
 
-      iex> Brainworms.Utils.integer_to_bitlist(130)
+      iex> NeonPerceptron.Utils.integer_to_bitlist(130)
       [0, 0, 0, 0, 0, 1, 0]
   """
   def integer_to_bitlist(value) when is_integer(value) do
@@ -92,7 +92,7 @@ defmodule Brainworms.Utils do
   Useful for writing to PWM registers like on
   [this board](https://core-electronics.com.au/adafruit-24-channel-12-bit-pwm-led-driver-spi-interface-tlc5947.html).
 
-      iex> Brainworms.Utils.pwm_encode([0, 1, 0, 1])
+      iex> NeonPerceptron.Utils.pwm_encode([0, 1, 0, 1])
       <<0, 0, 255, 255, 0, 0, 255, 255>>
   """
   def pwm_encode(values) when is_list(values) do
@@ -111,7 +111,7 @@ defmodule Brainworms.Utils do
   value, divided by 1.0e9 to convert to seconds.
 
   Example:
-      iex> Brainworms.Utils.float_now()
+      iex> NeonPerceptron.Utils.float_now()
       1641234567.123456  # Value will vary based on current time
   """
   def float_now() do
@@ -125,7 +125,7 @@ defmodule Brainworms.Utils do
   Returns a value between -1 and 1.
 
   Example:
-      iex> Brainworms.Utils.osc(1.0)  # Generate 1Hz sine wave
+      iex> NeonPerceptron.Utils.osc(1.0)  # Generate 1Hz sine wave
       0.5  # Value will vary based on current time
   """
   def osc(frequency, phase \\ 0.0, t \\ float_now()) do

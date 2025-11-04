@@ -1,4 +1,4 @@
-defmodule Brainworms.MCP23017 do
+defmodule NeonPerceptron.MCP23017 do
   alias Circuits.I2C
   # MCP23017 default address; adjust if necessary
   @i2c_address 0x27

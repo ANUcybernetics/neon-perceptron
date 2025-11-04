@@ -1,9 +1,9 @@
-defmodule Brainworms.ModelTest do
+defmodule NeonPerceptron.ModelTest do
   use ExUnit.Case
 
   test "model initializes without starting training immediately" do
     # Create a test process to monitor the Model GenServer initialization
-    {:ok, model_pid} = GenServer.start_link(Brainworms.Model, [])
+    {:ok, model_pid} = GenServer.start_link(NeonPerceptron.Model, [])
 
     # Give it a moment to potentially schedule training
     Process.sleep(5)
@@ -23,7 +23,7 @@ defmodule Brainworms.ModelTest do
 
   test "training loop allows message processing" do
     # Start the model
-    {:ok, model_pid} = GenServer.start_link(Brainworms.Model, [])
+    {:ok, model_pid} = GenServer.start_link(NeonPerceptron.Model, [])
 
     # Wait for some training iterations
     Process.sleep(50)
@@ -48,12 +48,12 @@ defmodule Brainworms.ModelTest do
   # test that the model converges to reasonable accuracy rather than requiring perfection
   # this is more robust than the previous test which required 100% accuracy
   test "end-to-end test" do
-    model = Brainworms.Model.new(2)
-    {inputs, targets} = Brainworms.Model.training_set()
+    model = NeonPerceptron.Model.new(2)
+    {inputs, targets} = NeonPerceptron.Model.training_set()
     training_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
 
     # reduced from 500 to 300 epochs - enough to reliably achieve 70% while still being faster
-    params = Brainworms.Model.train(model, training_data, epochs: 300)
+    params = NeonPerceptron.Model.train(model, training_data, epochs: 300)
 
     # check that parameters have been updated (model isn't stuck)
     dense_0_sum = Map.get(params, :data)["dense_0"]["kernel"] |> Nx.sum()
@@ -75,8 +75,8 @@ defmodule Brainworms.ModelTest do
   end
 
   test "model halting" do
-    model = Brainworms.Model.new(2)
-    {inputs, targets} = Brainworms.Model.training_set()
+    model = NeonPerceptron.Model.new(2)
+    {inputs, targets} = NeonPerceptron.Model.training_set()
     training_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
 
     model
@@ -90,8 +90,8 @@ defmodule Brainworms.ModelTest do
 
   test "test 'manual activations' vs real predictions" do
     # model, dataset & test input the same in both cases
-    model = Brainworms.Model.new(2)
-    {inputs, targets} = training_set = Brainworms.Model.training_set()
+    model = NeonPerceptron.Model.new(2)
+    {inputs, targets} = training_set = NeonPerceptron.Model.training_set()
 
     # reduced from 1_000 to speed up tests - test still validates the core functionality
     num_epochs = 100
@@ -99,7 +99,7 @@ defmodule Brainworms.ModelTest do
     # the "build & train in one hit" setup
     {_init_fn, predict_fn} = Axon.build(model, print_values: false)
     training_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
-    params = Brainworms.Model.train(model, training_data, epochs: num_epochs)
+    params = NeonPerceptron.Model.train(model, training_data, epochs: num_epochs)
 
     y_pred = predict_fn.(params, inputs)
 
@@ -135,9 +135,9 @@ defmodule Brainworms.ModelTest do
       |> Nx.to_list()
       |> Enum.with_index(fn distribution, digit ->
         final_layer =
-          Brainworms.Model.activations_from_model_state(
+          NeonPerceptron.Model.activations_from_model_state(
             step_state.model_state,
-            Brainworms.Utils.digit_to_bitlist(digit)
+            NeonPerceptron.Utils.digit_to_bitlist(digit)
           )
           |> List.last()
 
@@ -154,8 +154,8 @@ defmodule Brainworms.ModelTest do
 
   test "prediction test (no training)" do
     # model, dataset & test input the same in both cases
-    model = Brainworms.Model.new(2)
-    {inputs, targets} = Brainworms.Model.training_set()
+    model = NeonPerceptron.Model.new(2)
+    {inputs, targets} = NeonPerceptron.Model.training_set()
 
     # minimal epochs since this test is just validating prediction mechanics, not accuracy
     num_epochs = 10
@@ -163,7 +163,7 @@ defmodule Brainworms.ModelTest do
     # the "build & train in one hit" setup
     {_init_fn, predict_fn} = Axon.build(model, print_values: false)
     training_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
-    params = Brainworms.Model.train(model, training_data, epochs: num_epochs)
+    params = NeonPerceptron.Model.train(model, training_data, epochs: num_epochs)
 
     Axon.reduce_nodes(model, [], fn
       %Axon.Node{op: :dense} = node, acc ->

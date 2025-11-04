@@ -1,8 +1,8 @@
-defmodule Brainworms.Model do
+defmodule NeonPerceptron.Model do
   use GenServer
-  alias Brainworms.Utils
-  alias Brainworms.Knob
-  alias Brainworms.Display
+  alias NeonPerceptron.Utils
+  alias NeonPerceptron.Knob
+  alias NeonPerceptron.Display
 
   @moduledoc """
   Helper module for defining, training and running inference with fully-connected
@@ -210,7 +210,7 @@ defmodule Brainworms.Model do
   Note that the returned tensor won't include the digits explicitly, but the digits can be used to index
   into the `:digit` axis to get the correct bitlist, e.g.
 
-      iex> train_data = Brainworms.Train.inputs()
+      iex> train_data = NeonPerceptron.Train.inputs()
       iex> train_data[[digit: 0]]
       #Nx.Tensor<
         f32[bitlist: 7]

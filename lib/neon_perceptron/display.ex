@@ -1,10 +1,10 @@
-defmodule Brainworms.Display do
+defmodule NeonPerceptron.Display do
   @moduledoc """
   A GenServer for controlling and displaying neural network activations on an LED display.
   """
   use GenServer
 
-  alias Brainworms.Utils
+  alias NeonPerceptron.Utils
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)

@@ -1,4 +1,4 @@
-defmodule Brainworms.Knob do
+defmodule NeonPerceptron.Knob do
   use GenServer
   alias Circuits.GPIO
 

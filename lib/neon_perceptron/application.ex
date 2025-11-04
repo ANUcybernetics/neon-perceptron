@@ -1,4 +1,4 @@
-defmodule Brainworms.Application do
+defmodule NeonPerceptron.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
@@ -10,16 +10,16 @@ defmodule Brainworms.Application do
     children =
       [
         # Knob starts first
-        Brainworms.Knob,
+        NeonPerceptron.Knob,
         # Display starts after Knob
-        Brainworms.Display,
+        NeonPerceptron.Display,
         # Model starts after Display
-        Brainworms.Model
+        NeonPerceptron.Model
       ] ++ target_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
-    opts = [strategy: :rest_for_one, name: Brainworms.Supervisor]
+    opts = [strategy: :rest_for_one, name: NeonPerceptron.Supervisor]
     Supervisor.start_link(children, opts)
   end
 

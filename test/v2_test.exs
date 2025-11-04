@@ -1,4 +1,4 @@
-defmodule Brainworms.V2Test do
+defmodule NeonPerceptron.V2Test do
   use ExUnit.Case
 
   @image_size 5

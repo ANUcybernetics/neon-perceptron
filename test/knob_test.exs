@@ -1,8 +1,8 @@
-defmodule Brainworms.KnobTest do
+defmodule NeonPerceptron.KnobTest do
   use ExUnit.Case
 
   test "knob initializes with nil pins when GPIO unavailable" do
-    {:ok, knob_pid} = GenServer.start_link(Brainworms.Knob, [])
+    {:ok, knob_pid} = GenServer.start_link(NeonPerceptron.Knob, [])
     
     state = :sys.get_state(knob_pid)
     
@@ -15,7 +15,7 @@ defmodule Brainworms.KnobTest do
   end
 
   test "knob handles GPIO interrupts gracefully when hardware unavailable" do
-    {:ok, knob_pid} = GenServer.start_link(Brainworms.Knob, [])
+    {:ok, knob_pid} = GenServer.start_link(NeonPerceptron.Knob, [])
     
     # Simulate GPIO interrupts when hardware is not available
     send(knob_pid, {:circuits_gpio, "GPIO17", 123456, 1})
@@ -35,7 +35,7 @@ defmodule Brainworms.KnobTest do
   end
 
   test "position/0 returns integer when hardware unavailable" do
-    {:ok, knob_pid} = GenServer.start_link(Brainworms.Knob, [])
+    {:ok, knob_pid} = GenServer.start_link(NeonPerceptron.Knob, [])
     
     position = GenServer.call(knob_pid, :position)
     assert is_integer(position)

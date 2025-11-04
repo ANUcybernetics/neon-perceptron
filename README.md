@@ -1,4 +1,4 @@
-# Brainworms
+# Neon Perceptron
 
 A _Cybernetic Studio_ project by Ben Swift & Brendan Traw.
 

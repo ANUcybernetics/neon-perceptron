@@ -1,7 +1,7 @@
-defmodule Brainworms.MixProject do
+defmodule NeonPerceptron.MixProject do
   use Mix.Project
 
-  @app :brainworms
+  @app :neon_perceptron
   @version "0.1.0"
   @all_targets [:rpi4]
 
@@ -22,7 +22,7 @@ defmodule Brainworms.MixProject do
   def application do
     [
       extra_applications: [:logger, :runtime_tools],
-      mod: {Brainworms.Application, []}
+      mod: {NeonPerceptron.Application, []}
     ]
   end
 

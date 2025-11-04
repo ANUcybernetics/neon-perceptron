@@ -8,7 +8,7 @@ config :logger, backends: [RingLogger]
 
 # Hardware configuration for target environment (Nerves devices)
 # When running on target, hardware should be available and required
-config :brainworms, hardware_required: true
+config :neon_perceptron, hardware_required: true
 
 # Use shoehorn to start the main application. See the shoehorn
 # library documentation for more control in ordering how OTP

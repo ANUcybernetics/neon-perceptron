@@ -1,6 +1,6 @@
-defmodule BrainwormsTest.UtilsTest do
+defmodule NeonPerceptronTest.UtilsTest do
   use ExUnit.Case
-  alias Brainworms.Utils
+  alias NeonPerceptron.Utils
 
   test "conversion is reversible for all digits" do
     for digit <- 0..9 do
