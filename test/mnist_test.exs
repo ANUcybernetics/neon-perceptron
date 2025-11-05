@@ -4,12 +4,14 @@ defmodule NeonPerceptron.MNISTTest do
   @moduletag :mnist
   @moduletag timeout: 600_000
   @epochs 20
+  @min_hidden 4
+  @max_hidden 12
 
   test "train MNIST models with varying hidden layer sizes" do
     {train_data, test_data} = load_mnist_data()
 
     results =
-      for m <- 9..25 do
+      for m <- @min_hidden..@max_hidden do
         model = create_model(m)
         trained_params = train_model(model, train_data, epochs: @epochs, batch_size: 128)
         accuracy = calculate_accuracy(model, trained_params, test_data)
@@ -17,10 +19,14 @@ defmodule NeonPerceptron.MNISTTest do
       end
       |> Map.new()
 
+    expected_count = @max_hidden - @min_hidden + 1
+
     IO.puts("\nMNIST Test Results (25 inputs, m hidden, 10 outputs)")
+    IO.puts("Hidden layer range: #{@min_hidden}..#{@max_hidden}")
     IO.inspect(results, label: "Hidden neurons (m) -> Accuracy")
 
-    assert map_size(results) == 17, "Should have trained 17 models (m=9 to m=25)"
+    assert map_size(results) == expected_count,
+           "Should have trained #{expected_count} models (m=#{@min_hidden} to m=#{@max_hidden})"
   end
 
   defp create_model(hidden_size) do
