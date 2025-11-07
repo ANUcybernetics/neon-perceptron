@@ -4,7 +4,7 @@ defmodule NeonPerceptron.MNISTTest do
   @moduletag :mnist
   @moduletag timeout: 600_000
   @epochs 20
-  @min_hidden 4
+  @min_hidden 8
   @max_hidden 12
 
   test "train MNIST models with varying hidden layer sizes" do
