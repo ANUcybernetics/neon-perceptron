@@ -44,7 +44,8 @@ defmodule NeonPerceptron.MixProject do
 
       # AI stuff
       {:axon, "~> 0.7"},
-      {:exla, "~> 0.10.0"},
+      {:exla, "~> 0.10.0", targets: @all_targets},
+      {:emlx, github: "elixir-nx/emlx", branch: "main", targets: :host},
       {:scidata, "~> 0.1", only: :test},
       {:nx_image, "~> 0.1.0", only: :test},
 
