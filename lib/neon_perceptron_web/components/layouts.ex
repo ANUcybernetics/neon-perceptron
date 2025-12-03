@@ -5,4 +5,4 @@ defmodule NeonPerceptronWeb.Layouts do
   use NeonPerceptronWeb, :html
 
   embed_templates("layouts/*")
-  end
+end
