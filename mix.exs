@@ -49,6 +49,14 @@ defmodule NeonPerceptron.MixProject do
       {:scidata, "~> 0.1", only: :test},
       {:nx_image, "~> 0.1.0", only: :test},
 
+      # Phoenix (host only, for digital twin visualisation)
+      {:phoenix, "~> 1.7", targets: :host},
+      {:phoenix_live_view, "~> 1.0", targets: :host},
+      {:phoenix_html, "~> 4.1", targets: :host},
+      {:esbuild, "~> 0.8", runtime: false, targets: :host},
+      {:jason, "~> 1.4"},
+      {:plug_cowboy, "~> 2.7", targets: :host},
+
       # Development tools
       {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},
       {:usage_rules, "~> 0.1", only: [:dev, :test], runtime: false},

@@ -7,15 +7,7 @@ defmodule NeonPerceptron.Application do
 
   @impl true
   def start(_type, _args) do
-    children =
-      [
-        # Knob starts first
-        NeonPerceptron.Knob,
-        # Display starts after Knob
-        NeonPerceptron.Display,
-        # Model starts after Display
-        NeonPerceptron.Model
-      ] ++ target_children()
+    children = common_children() ++ target_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -23,23 +15,28 @@ defmodule NeonPerceptron.Application do
     Supervisor.start_link(children, opts)
   end
 
+  defp common_children do
+    [
+      NeonPerceptron.Knob,
+      NeonPerceptron.Display
+    ]
+  end
+
   # List all child processes to be supervised
   if Mix.target() == :host do
-    defp target_children() do
+    defp target_children do
       [
-        # Children that only run on the host during development or test.
-        # In general, prefer using `config/host.exs` for differences.
-        #
-        # Starts a worker by calling: Host.Worker.start_link(arg)
-        # {Host.Worker, arg},
+        # Use 25-input model for digital twin on host
+        {NeonPerceptron.Model25, [hidden_size: 8]},
+        {Phoenix.PubSub, name: NeonPerceptron.PubSub},
+        NeonPerceptronWeb.Endpoint
       ]
     end
   else
-    defp target_children() do
+    defp target_children do
       [
-        # Children for all targets except host
-        # Starts a worker by calling: Target.Worker.start_link(arg)
-        # {Target.Worker, arg},
+        # Use 7-input model on device (for physical hardware)
+        NeonPerceptron.Model
       ]
     end
   end

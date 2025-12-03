@@ -9,6 +9,27 @@ config :nx, default_backend: EMLX.Backend
 # should gracefully degrade to simulation mode
 config :neon_perceptron, hardware_required: false
 
+# Phoenix configuration (host only)
+config :neon_perceptron, NeonPerceptronWeb.Endpoint,
+  url: [host: "localhost"],
+  adapter: Phoenix.Endpoint.Cowboy2Adapter,
+  http: [ip: {127, 0, 0, 1}, port: 4000],
+  check_origin: false,
+  secret_key_base: "neon_perceptron_dev_secret_key_base_at_least_64_bytes_long_for_security",
+  live_view: [signing_salt: "neon_perceptron_salt"],
+  render_errors: [formats: [html: NeonPerceptronWeb.ErrorHTML], layout: false],
+  pubsub_server: NeonPerceptron.PubSub,
+  server: true
+
+config :esbuild,
+  version: "0.17.11",
+  neon_perceptron: [
+    args:
+      ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets --external:/fonts/* --external:/images/*),
+    cd: Path.expand("../assets", __DIR__),
+    env: %{"NODE_PATH" => Path.expand("../assets/node_modules", __DIR__)}
+  ]
+
 config :nerves_runtime,
   kv_backend:
     {Nerves.Runtime.KVBackend.InMemory,

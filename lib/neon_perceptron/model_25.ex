@@ -1,43 +1,30 @@
-defmodule NeonPerceptron.Model do
+defmodule NeonPerceptron.Model25 do
   use GenServer
-  alias NeonPerceptron.Utils
-  alias NeonPerceptron.Knob
-  alias NeonPerceptron.Display
 
   @moduledoc """
-  Helper module for defining, training and running inference with fully-connected
-  networks for the "map a seven-segment digit to the number displayed" problem.
+  A 25-input neural network model for the digital twin visualisation.
 
-  This module is a leaky abstraction - the returned models are [Axon](https://hexdocs.pm/axon/)
-  data structures. If you just follow this notebook you (probably) don't need to understand
-  how they work.
+  Architecture: 25 inputs (5×5 pixel grid) → hidden layer (configurable) → 10 outputs
+
+  This model is designed for:
+  - Interactive input from the web UI (drawing on a 5×5 grid)
+  - Real-time visualisation of activations and weights
+  - Training on downsampled MNIST data (future)
   """
 
-  # how often to print summary stats to the log (disable for prod)
   @training_log_interval 5_000
-  # in steps (need to tweak once we're on the board)
   @display_update_interval 1
-  # broadcast to web at ~30fps (every 33ms, or ~33 iterations at 1ms/iteration)
   @web_broadcast_interval 33
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
-  # @type state :: %{
-  #         activations: %{
-  #           input: list(float()),
-  #           dense_0: list(float()),
-  #           hidden_0: list(float()),
-  #           dense_1: list(float()),
-  #           output: list(float())
-  #         }
-  #       }
-
   @impl true
-  def init(_opts) do
-    # initialise model & training state
-    model = new(2)
+  def init(opts) do
+    hidden_size = Keyword.get(opts, :hidden_size, 8)
+
+    model = new(hidden_size)
     training_data = training_set()
     {init_fn, step_fn} = Axon.Loop.train_step(model, :categorical_cross_entropy, :adam)
     {_, predict_fn} = Axon.build(model)
@@ -46,13 +33,14 @@ defmodule NeonPerceptron.Model do
     {:ok,
      %{
        model: model,
+       hidden_size: hidden_size,
        training_data: training_data,
        init_fn: init_fn,
        step_fn: step_fn,
        predict_fn: predict_fn,
        step_state: step_state,
-       activations: null_activations(),
-       web_input: nil
+       activations: null_activations(hidden_size),
+       web_input: List.duplicate(0.0, 25)
      }, {:continue, :start_training}}
   end
 
@@ -79,6 +67,17 @@ defmodule NeonPerceptron.Model do
   end
 
   @impl true
+  def handle_call(:topology, _from, state) do
+    topology = %{
+      input_size: 25,
+      hidden_size: state.hidden_size,
+      output_size: 10
+    }
+
+    {:reply, topology, state}
+  end
+
+  @impl true
   def handle_call(:reset, _from, state) do
     step_state = state.init_fn.(state.training_data, Axon.ModelState.empty())
     {:reply, :ok, %{state | step_state: step_state}}
@@ -88,14 +87,11 @@ defmodule NeonPerceptron.Model do
   def handle_cast({:calc_layer_activations, :input, input}, state) do
     kernel = get_kernel(state.step_state.model_state, "dense_0")
 
-    # this is a bit "fake", because we ignore the bias
-    # TODO perhaps Axon can set the model to learn bias-less dense kernels?
     dense_0_activations =
       input
       |> Nx.transpose()
       |> Nx.broadcast(Nx.shape(kernel))
       |> Nx.multiply(kernel)
-      # |> Nx.flatten()
       |> Nx.to_flat_list()
 
     activations =
@@ -108,14 +104,11 @@ defmodule NeonPerceptron.Model do
   def handle_cast({:calc_layer_activations, :hidden_0, hidden_0}, state) do
     kernel = get_kernel(state.step_state.model_state, "dense_1")
 
-    # this is a bit "fake", because we ignore the bias
-    # TODO perhaps Axon can set the model to learn bias-less dense kernels?
     dense_1_activations =
       hidden_0
       |> Nx.transpose()
       |> Nx.broadcast(Nx.shape(kernel))
       |> Nx.multiply(kernel)
-      # |> Nx.flatten()
       |> Nx.transpose()
       |> Nx.to_flat_list()
 
@@ -136,7 +129,6 @@ defmodule NeonPerceptron.Model do
 
   @impl true
   def handle_cast({:predict, input}, state) do
-    # run for the side effect of triggering the calculation of the activations
     predict_helper(input, state)
     {:noreply, state}
   end
@@ -156,16 +148,7 @@ defmodule NeonPerceptron.Model do
     end
 
     if rem(iteration, @display_update_interval) == 0 do
-      # use web input if available, otherwise fall back to knob
-      input =
-        case state.web_input do
-          nil -> Knob.position() |> Utils.integer_to_bitlist()
-          web_input -> web_input
-        end
-
-      GenServer.cast(__MODULE__, {:predict, input})
-
-      Display.update(state.activations)
+      GenServer.cast(__MODULE__, {:predict, state.web_input})
     end
 
     if rem(iteration, @web_broadcast_interval) == 0 do
@@ -177,15 +160,10 @@ defmodule NeonPerceptron.Model do
   end
 
   @doc """
-  Create a fully-connected multi-layer perceptron model
-
-  The model will have a 7-dimensional input (each one corresponding to a segment in the
-  display) and a 10-dimensional output (for the softmax predictions; one for each digit 0-9).
-
-  `hidden_layer_sizes` is the size of the hidden layer.
+  Create a fully-connected MLP for 5×5 pixel input classification.
   """
   def new(hidden_layer_size) do
-    Axon.input("bitlist", shape: {nil, 7})
+    Axon.input("pixels", shape: {nil, 25})
     |> calc_layer_activations_hook(:input)
     |> Axon.dense(hidden_layer_size)
     |> Axon.tanh()
@@ -205,7 +183,6 @@ defmodule NeonPerceptron.Model do
     Axon.attach_hook(
       model,
       fn value ->
-        # has to be a cast, because a Call will block (resulting in deadlock)
         GenServer.cast(__MODULE__, {:calc_layer_activations, layer, value})
       end,
       on: :forward,
@@ -214,32 +191,14 @@ defmodule NeonPerceptron.Model do
   end
 
   @doc """
-  Create a training set of bitlists for use as a training set.
-
-  Compared to most AI problems this is _extremely_ trivial; there are only
-  10 digits, and each one has one unambiguous bitlist representation, so
-  z there are only 10 pairs in the training set. Toy problems ftw :)
-
-  The output won't be a list of lists, it'll be an [Nx](https://hexdocs.pm/nx/) tensor,
-  because that's what's expected by the training code.
-
-  Note that the returned tensor won't include the digits explicitly, but the digits can be used to index
-  into the `:digit` axis to get the correct bitlist, e.g.
-
-      iex> train_data = NeonPerceptron.Train.inputs()
-      iex> train_data[[digit: 0]]
-      #Nx.Tensor<
-        f32[bitlist: 7]
-        [1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0]
-      >
+  Create a simple training set with synthetic 5×5 digit patterns.
   """
-  def training_set() do
+  def training_set do
     inputs =
       0..9
-      |> Enum.map(&Utils.digit_to_bitlist/1)
-      |> Nx.tensor(names: [:digit, :bitlist], type: :f32)
+      |> Enum.map(&digit_to_5x5_pattern/1)
+      |> Nx.tensor(names: [:digit, :pixel], type: :f32)
 
-    # a tensor of the (one-hot-encoded) digits 0-9 (one per row).
     targets =
       0..9
       |> Enum.to_list()
@@ -250,17 +209,21 @@ defmodule NeonPerceptron.Model do
     {inputs, targets}
   end
 
-  @doc """
-  Train a model on the given data.
+  def digit_to_5x5_pattern(digit) do
+    patterns = %{
+      0 => [1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+      1 => [0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0],
+      2 => [1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1],
+      3 => [1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0],
+      4 => [1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+      5 => [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0],
+      6 => [0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0],
+      7 => [1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0],
+      8 => [0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0],
+      9 => [0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 0]
+    }
 
-  Returns an Axon loop configured with categorical cross-entropy loss,
-  the Adam optimizer, and accuracy metrics.
-  """
-  def train(model, data, opts \\ []) do
-    model
-    |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
-    |> Axon.Loop.metric(:accuracy, "Accuracy")
-    |> Axon.Loop.run(data, Axon.ModelState.empty(), opts)
+    Map.get(patterns, digit)
   end
 
   def print_param_summary(step_state, activations) do
@@ -312,21 +275,11 @@ defmodule NeonPerceptron.Model do
     )
   end
 
-  def activations() do
-    GenServer.call(__MODULE__, :activations)
-  end
-
-  def predict(input) do
-    GenServer.call(__MODULE__, {:predict, input})
-  end
-
-  def iteration() do
-    GenServer.call(__MODULE__, :iteration)
-  end
-
-  def reset do
-    GenServer.call(__MODULE__, :reset)
-  end
+  def activations, do: GenServer.call(__MODULE__, :activations)
+  def topology, do: GenServer.call(__MODULE__, :topology)
+  def predict(input), do: GenServer.call(__MODULE__, {:predict, input})
+  def iteration, do: GenServer.call(__MODULE__, :iteration)
+  def reset, do: GenServer.call(__MODULE__, :reset)
 
   def set_web_input(input) when is_list(input) do
     GenServer.cast(__MODULE__, {:set_web_input, input})
@@ -335,15 +288,14 @@ defmodule NeonPerceptron.Model do
   defp broadcast_to_web(state) do
     if pubsub_available?() do
       weights = extract_weights(state.step_state.model_state)
-      hidden_size = length(state.activations.hidden_0)
 
       data = %{
         activations: state.activations,
         weights: weights,
         topology: %{
-          input_size: length(state.activations.input),
-          hidden_size: hidden_size,
-          output_size: length(state.activations.output)
+          input_size: 25,
+          hidden_size: state.hidden_size,
+          output_size: 10
         }
       }
 
@@ -367,16 +319,16 @@ defmodule NeonPerceptron.Model do
     }
   end
 
-  defp schedule_training_step() do
+  defp schedule_training_step do
     Process.send_after(self(), :train_step, 1)
   end
 
-  def null_activations() do
+  def null_activations(hidden_size) do
     %{
-      input: List.duplicate(0.0, 7),
-      dense_0: List.duplicate(0.0, 14),
-      hidden_0: List.duplicate(0.0, 2),
-      dense_1: List.duplicate(0.0, 20),
+      input: List.duplicate(0.0, 25),
+      dense_0: List.duplicate(0.0, 25 * hidden_size),
+      hidden_0: List.duplicate(0.0, hidden_size),
+      dense_1: List.duplicate(0.0, hidden_size * 10),
       output: List.duplicate(0.0, 10)
     }
   end
@@ -386,76 +338,5 @@ defmodule NeonPerceptron.Model do
 
     state.predict_fn.(state.step_state.model_state, batched_input)
     |> Nx.to_flat_list()
-  end
-
-  @doc """
-  Run single-shot inference for a trained model.
-
-  Intended use:
-  - `model` comes from `new/1`
-  - `params` comes from `train/2`
-
-  For a given `digit` 0-9, return the predicted class distribution under `model`.
-  """
-  def predict(model, params, digit) do
-    input = Utils.digit_to_bitlist(digit) |> Nx.tensor() |> Nx.new_axis(0)
-    {_init_fn, predict_fn} = Axon.build(model)
-    predict_fn.(params, input)
-  end
-
-  @doc """
-  Run single-shot inference for a trained model and return the most likely digit class.
-
-  Intended use:
-  - `model` comes from `new/1`
-  - `params` comes from `train/2`
-
-  For a given `digit` 0-9, return the predicted digit class (0-9) under `model`.
-  """
-  def predict_class(model, params, digit) do
-    model
-    |> predict(params, digit)
-    |> Nx.argmax(axis: 1)
-    |> Nx.to_flat_list()
-    |> List.first()
-  end
-
-  @doc """
-  Calculate layer activations manually from model state.
-
-  This is a somewhat hacky way to extract intermediate layer activations. There's probably a
-  nicer and more general way to get this info out of Axon (e.g. `Axon.build/2` with `print_values: true`
-  will print some of the right values) but I haven't found it yet.
-
-  Used to map neural network calculations to wire brightness values for visualization.
-  """
-  def activations_from_model_state(model_state, input) do
-    weights = Map.get(model_state, :data)
-
-    %{
-      "dense_0" => %{"bias" => _bias_0, "kernel" => kernel_0},
-      "dense_1" => %{"bias" => _bias_1, "kernel" => kernel_1}
-    } = weights
-
-    input_vector = Nx.tensor(input, type: :f32)
-
-    activations_dense_0 =
-      input_vector |> Nx.new_axis(1) |> Nx.multiply(kernel_0)
-
-    tanh_0 = activations_dense_0 |> Nx.sum(axes: [0]) |> Nx.tanh()
-
-    activations_dense_1 =
-      tanh_0 |> Nx.new_axis(1) |> Nx.multiply(kernel_1)
-
-    softmax_0 = activations_dense_1 |> Nx.sum(axes: [0]) |> Axon.Activations.softmax()
-
-    [
-      input_vector,
-      activations_dense_0,
-      tanh_0,
-      activations_dense_1,
-      softmax_0
-    ]
-    |> Enum.map(fn tensor -> Nx.to_flat_list(tensor) end)
   end
 end
