@@ -13,7 +13,7 @@ defmodule NeonPerceptronWeb.DigitalTwinLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div id="digital-twin" phx-hook="DigitalTwin" phx-update="ignore" style="width: 100%; height: 100%;"></div>
+    <div id="digital-twin" phx-hook="DigitalTwin" phx-update="ignore" style="width: 100vw; height: 100vh;"></div>
     """
   end
 
