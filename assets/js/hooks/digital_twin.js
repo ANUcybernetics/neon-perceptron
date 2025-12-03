@@ -66,6 +66,10 @@ export const DigitalTwin = {
     this.nodes = { input: [], hidden: [], output: [] };
     this.edges = { inputToHidden: [], hiddenToOutput: [] };
 
+    // Store weights and activations for edge visualisation
+    this.currentWeights = { dense_0: null, dense_1: null };
+    this.currentActivations = { input: null, hidden: null };
+
     this.createNodes();
     this.createEdges();
   },
@@ -185,8 +189,9 @@ export const DigitalTwin = {
     // Skip updates until network is initialized
     if (!this.networkInitialized) return;
 
-    // Update input nodes
+    // Update input nodes and store activations
     if (activations.input) {
+      this.currentActivations.input = activations.input;
       activations.input.forEach((value, i) => {
         if (this.nodes.input[i]) {
           const intensity = Math.abs(value);
@@ -195,8 +200,9 @@ export const DigitalTwin = {
       });
     }
 
-    // Update hidden nodes
+    // Update hidden nodes and store activations
     if (activations.hidden_0) {
+      this.currentActivations.hidden = activations.hidden_0;
       activations.hidden_0.forEach((value, i) => {
         if (this.nodes.hidden[i]) {
           const intensity = Math.abs(value);
@@ -225,44 +231,68 @@ export const DigitalTwin = {
     // weights.dense_0: [input_size, hidden_size]
     // weights.dense_1: [hidden_size, output_size]
 
-    if (weights.dense_0) {
-      const w0 = weights.dense_0;
+    // Store weights for later use
+    if (weights.dense_0) this.currentWeights.dense_0 = weights.dense_0;
+    if (weights.dense_1) this.currentWeights.dense_1 = weights.dense_1;
+
+    // Update input→hidden edges (activation = input * weight)
+    if (this.currentWeights.dense_0) {
+      const w0 = this.currentWeights.dense_0;
+      const inputActs = this.currentActivations.input;
       let edgeIdx = 0;
       for (let i = 0; i < this.inputSize; i++) {
+        const inputValue = inputActs ? inputActs[i] || 0 : 0;
         for (let j = 0; j < this.hiddenSize; j++) {
           const weight = w0[i * this.hiddenSize + j] || 0;
-          this.setEdgeAppearance(this.edges.inputToHidden[edgeIdx], weight);
+          const activation = inputValue * weight;
+          this.setEdgeAppearance(
+            this.edges.inputToHidden[edgeIdx],
+            weight,
+            activation,
+          );
           edgeIdx++;
         }
       }
     }
 
-    if (weights.dense_1) {
-      const w1 = weights.dense_1;
+    // Update hidden→output edges (activation = hidden * weight)
+    if (this.currentWeights.dense_1) {
+      const w1 = this.currentWeights.dense_1;
+      const hiddenActs = this.currentActivations.hidden;
       let edgeIdx = 0;
       for (let i = 0; i < this.hiddenSize; i++) {
+        const hiddenValue = hiddenActs ? hiddenActs[i] || 0 : 0;
         for (let j = 0; j < this.outputSize; j++) {
           const weight = w1[i * this.outputSize + j] || 0;
-          this.setEdgeAppearance(this.edges.hiddenToOutput[edgeIdx], weight);
+          const activation = hiddenValue * weight;
+          this.setEdgeAppearance(
+            this.edges.hiddenToOutput[edgeIdx],
+            weight,
+            activation,
+          );
           edgeIdx++;
         }
       }
     }
   },
 
-  setEdgeAppearance(edge, weight) {
+  setEdgeAppearance(edge, weight, activation) {
     if (!edge) return;
 
-    const absWeight = Math.min(Math.abs(weight), 2) / 2;
-    const isPositive = weight >= 0;
+    const absActivation = Math.min(Math.abs(activation), 2) / 2;
+    const isPositive = activation >= 0;
 
-    // Green for positive, red for negative
-    const color = isPositive
-      ? new THREE.Color(0x44ff44)
-      : new THREE.Color(0xff4444);
-
-    edge.material.color = color;
-    edge.material.opacity = 0.1 + absWeight * 0.6;
+    // Green for positive activation, red for negative, grey for zero/inactive
+    if (Math.abs(activation) < 0.001) {
+      edge.material.color = new THREE.Color(0x444444);
+      edge.material.opacity = 0.1;
+    } else {
+      const color = isPositive
+        ? new THREE.Color(0x44ff44)
+        : new THREE.Color(0xff4444);
+      edge.material.color = color;
+      edge.material.opacity = 0.15 + absActivation * 0.7;
+    }
   },
 
   rebuildNetwork() {
