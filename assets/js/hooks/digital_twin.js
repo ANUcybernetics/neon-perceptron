@@ -4,7 +4,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 export const DigitalTwin = {
   mounted() {
     this.initScene();
-    this.initNetwork();
+    this.networkInitialized = false;
     this.animate();
 
     this.handleEvent("activations", (data) => {
@@ -50,14 +50,14 @@ export const DigitalTwin = {
     this.renderer.domElement.addEventListener("click", (e) => this.onClick(e));
   },
 
-  initNetwork() {
-    // Network topology: 25 inputs (5x5 grid) -> hidden (3x3 grid) -> 10 outputs
-    this.inputSize = 25;
-    this.hiddenSize = 9;
-    this.outputSize = 10;
+  initNetwork(topology) {
+    // Network topology from server
+    this.inputSize = topology.input_size;
+    this.hiddenSize = topology.hidden_size;
+    this.outputSize = topology.output_size;
 
-    // User-controlled input state (5x5 grid)
-    this.inputState = new Array(25).fill(0);
+    // User-controlled input state
+    this.inputState = new Array(this.inputSize).fill(0);
 
     // Layer positions (x coordinates)
     this.layerX = { input: -4, hidden: 0, output: 4 };
@@ -170,11 +170,20 @@ export const DigitalTwin = {
   updateActivations(data) {
     const { activations, weights, topology } = data;
 
+    // Initialize network on first topology received
+    if (!this.networkInitialized && topology) {
+      this.initNetwork(topology);
+      this.networkInitialized = true;
+    }
+
     // Update topology if changed
     if (topology && topology.hidden_size !== this.hiddenSize) {
       this.hiddenSize = topology.hidden_size;
       this.rebuildNetwork();
     }
+
+    // Skip updates until network is initialized
+    if (!this.networkInitialized) return;
 
     // Update input nodes
     if (activations.input) {
@@ -313,6 +322,8 @@ export const DigitalTwin = {
   },
 
   onClick(event) {
+    if (!this.networkInitialized) return;
+
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;

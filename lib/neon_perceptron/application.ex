@@ -27,7 +27,7 @@ defmodule NeonPerceptron.Application do
     defp target_children do
       [
         # Use 25-input model for digital twin on host
-        {NeonPerceptron.Model25, [hidden_size: 8]},
+        {NeonPerceptron.Model25, [hidden_size: 9]},
         {Phoenix.PubSub, name: NeonPerceptron.PubSub},
         NeonPerceptronWeb.Endpoint
       ]
