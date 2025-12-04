@@ -77,6 +77,11 @@ defmodule NeonPerceptron.Model25 do
   @impl true
   def handle_info(:train_step, state) do
     step_state = state.step_fn.(state.training_data, state.step_state)
+
+    # Force evaluation to release intermediate computation graph tensors.
+    # Without this, EMLX/MLX accumulates tensors until hitting the resource limit.
+    eval_step_state(step_state)
+
     iteration = Nx.to_number(step_state.i)
 
     if rem(iteration, @training_log_interval) == 0 do
@@ -219,6 +224,32 @@ defmodule NeonPerceptron.Model25 do
   defp schedule_training_step do
     Process.send_after(self(), :train_step, 1)
   end
+
+  defp eval_step_state(step_state) do
+    %{model_state: %{data: data}, optimizer_state: {_, opt}} = step_state
+
+    for {_, layer} <- data, {_, tensor} <- layer do
+      emlx_eval(tensor)
+    end
+
+    emlx_eval(opt.count)
+
+    for {_, layer} <- opt.mu, {_, tensor} <- layer do
+      emlx_eval(tensor)
+    end
+
+    for {_, layer} <- opt.nu, {_, tensor} <- layer do
+      emlx_eval(tensor)
+    end
+
+    :ok
+  end
+
+  defp emlx_eval(%Nx.Tensor{data: %EMLX.Backend{ref: {_device, ref}}}) when is_reference(ref) do
+    EMLX.NIF.eval(ref)
+  end
+
+  defp emlx_eval(_), do: :ok
 
   defp predict_helper(input, state) do
     batched_input = input |> Nx.tensor() |> Nx.new_axis(0)
