@@ -1,10 +1,17 @@
 defmodule NeonPerceptronWeb.DigitalTwinLive do
+  @moduledoc """
+  LiveView for the Three.js digital twin visualisation.
+
+  Receives weight updates from the training server and pushes them to the JS client.
+  The client owns the input state and calculates all activations locally.
+  """
+
   use NeonPerceptronWeb, :live_view
 
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "activations")
+      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "weights")
     end
 
     {:ok, socket}
@@ -18,14 +25,7 @@ defmodule NeonPerceptronWeb.DigitalTwinLive do
   end
 
   @impl true
-  def handle_info({:activations, data}, socket) do
-    {:noreply, push_event(socket, "activations", data)}
-  end
-
-  @impl true
-  def handle_event("set_input", %{"input" => input}, socket) do
-    input_floats = Enum.map(input, fn v -> if v == 1, do: 1.0, else: 0.0 end)
-    NeonPerceptron.Model25.set_web_input(input_floats)
-    {:noreply, socket}
+  def handle_info({:weights, data}, socket) do
+    {:noreply, push_event(socket, "weights", data)}
   end
 end

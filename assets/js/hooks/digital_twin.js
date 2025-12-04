@@ -1,14 +1,28 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
+/**
+ * Digital Twin visualisation of the neural network.
+ *
+ * Architecture: input[25] → dense → tanh → dense → softmax → output[10]
+ *
+ * The server broadcasts weight updates at ~30fps. This client:
+ * - Owns the input state (user clicks on 5×5 grid)
+ * - Calculates all activations locally using the received weights
+ * - Renders the network with node intensities and edge colours based on activations
+ *
+ * Forward pass (matching the Axon model exactly):
+ *   hidden = tanh(input @ dense_0)
+ *   output = softmax(hidden @ dense_1)
+ */
 export const DigitalTwin = {
   mounted() {
     this.initScene();
     this.networkInitialized = false;
     this.animate();
 
-    this.handleEvent("activations", (data) => {
-      this.updateActivations(data);
+    this.handleEvent("weights", (data) => {
+      this.onWeightsReceived(data);
     });
 
     window.addEventListener("resize", () => this.onResize());
@@ -44,20 +58,21 @@ export const DigitalTwin = {
     directionalLight.position.set(5, 5, 5);
     this.scene.add(directionalLight);
 
-    // For raycasting (click detection)
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
     this.renderer.domElement.addEventListener("click", (e) => this.onClick(e));
   },
 
   initNetwork(topology) {
-    // Network topology from server
     this.inputSize = topology.input_size;
     this.hiddenSize = topology.hidden_size;
     this.outputSize = topology.output_size;
 
-    // User-controlled input state
+    // Client-owned input state (binary 0/1 for each pixel)
     this.inputState = new Array(this.inputSize).fill(0);
+
+    // Current weights from server
+    this.weights = { dense_0: null, dense_1: null };
 
     // Layer positions (x coordinates)
     this.layerX = { input: -4, hidden: 0, output: 4 };
@@ -66,10 +81,6 @@ export const DigitalTwin = {
     this.nodes = { input: [], hidden: [], output: [] };
     this.edges = { inputToHidden: [], hiddenToOutput: [] };
 
-    // Store weights and activations for edge visualisation
-    this.currentWeights = { dense_0: null, dense_1: null };
-    this.currentActivations = { input: null, hidden: null };
-
     this.createNodes();
     this.createEdges();
   },
@@ -77,7 +88,7 @@ export const DigitalTwin = {
   createNodes() {
     const nodeGeometry = new THREE.SphereGeometry(0.15, 16, 16);
 
-    // Input layer (5x5 grid arrangement)
+    // Input layer (5×5 grid)
     for (let i = 0; i < this.inputSize; i++) {
       const row = Math.floor(i / 5);
       const col = i % 5;
@@ -96,7 +107,7 @@ export const DigitalTwin = {
       this.nodes.input.push(node);
     }
 
-    // Hidden layer (3x3 grid, parallel to input grid)
+    // Hidden layer (arranged in rows of 3)
     for (let i = 0; i < this.hiddenSize; i++) {
       const row = Math.floor(i / 3);
       const col = i % 3;
@@ -115,7 +126,7 @@ export const DigitalTwin = {
       this.nodes.hidden.push(node);
     }
 
-    // Output layer (vertical line)
+    // Output layer (vertical line, labelled 0-9)
     for (let i = 0; i < this.outputSize; i++) {
       const y = ((this.outputSize - 1) / 2 - i) * 0.5;
 
@@ -133,7 +144,7 @@ export const DigitalTwin = {
   },
 
   createEdges() {
-    // Input to hidden edges
+    // Input → hidden edges
     for (let i = 0; i < this.inputSize; i++) {
       for (let j = 0; j < this.hiddenSize; j++) {
         const edge = this.createEdge(
@@ -146,7 +157,7 @@ export const DigitalTwin = {
       }
     }
 
-    // Hidden to output edges
+    // Hidden → output edges
     for (let i = 0; i < this.hiddenSize; i++) {
       for (let j = 0; j < this.outputSize; j++) {
         const edge = this.createEdge(
@@ -171,132 +182,158 @@ export const DigitalTwin = {
     return new THREE.Line(geometry, material);
   },
 
-  updateActivations(data) {
-    const { activations, weights, topology } = data;
+  onWeightsReceived(data) {
+    const { weights, topology } = data;
 
-    // Initialize network on first topology received
+    // Initialise network on first message
     if (!this.networkInitialized && topology) {
       this.initNetwork(topology);
       this.networkInitialized = true;
     }
 
-    // Update topology if changed
+    // Rebuild if topology changed
     if (topology && topology.hidden_size !== this.hiddenSize) {
       this.hiddenSize = topology.hidden_size;
       this.rebuildNetwork();
     }
 
-    // Skip updates until network is initialized
     if (!this.networkInitialized) return;
 
-    // Update input nodes and store activations
-    if (activations.input) {
-      this.currentActivations.input = activations.input;
-      activations.input.forEach((value, i) => {
-        if (this.nodes.input[i]) {
-          const intensity = Math.abs(value);
-          this.nodes.input[i].material.emissiveIntensity = intensity * 0.8;
-        }
-      });
-    }
-
-    // Update hidden nodes and store activations
-    if (activations.hidden_0) {
-      this.currentActivations.hidden = activations.hidden_0;
-      activations.hidden_0.forEach((value, i) => {
-        if (this.nodes.hidden[i]) {
-          const intensity = Math.abs(value);
-          this.nodes.hidden[i].material.emissiveIntensity = intensity * 0.8;
-        }
-      });
-    }
-
-    // Update output nodes
-    if (activations.output) {
-      activations.output.forEach((value, i) => {
-        if (this.nodes.output[i]) {
-          const intensity = Math.abs(value);
-          this.nodes.output[i].material.emissiveIntensity = intensity * 0.8;
-        }
-      });
-    }
-
-    // Update edge colours based on weights
+    // Store new weights
     if (weights) {
-      this.updateEdgeWeights(weights);
+      this.weights.dense_0 = weights.dense_0;
+      this.weights.dense_1 = weights.dense_1;
     }
+
+    // Recalculate and render
+    this.updateVisualisation();
   },
 
-  updateEdgeWeights(weights) {
-    // weights.dense_0: [input_size, hidden_size]
-    // weights.dense_1: [hidden_size, output_size]
+  /**
+   * Calculate forward pass and update visualisation.
+   * Called when weights change or when user clicks input nodes.
+   */
+  updateVisualisation() {
+    if (!this.weights.dense_0 || !this.weights.dense_1) return;
 
-    // Store weights for later use
-    if (weights.dense_0) this.currentWeights.dense_0 = weights.dense_0;
-    if (weights.dense_1) this.currentWeights.dense_1 = weights.dense_1;
+    // Forward pass: hidden = tanh(input @ dense_0)
+    const hidden = this.forwardDense(
+      this.inputState,
+      this.weights.dense_0,
+      this.inputSize,
+      this.hiddenSize,
+    ).map(Math.tanh);
 
-    // Update input→hidden edges (activation = input * weight)
-    if (this.currentWeights.dense_0) {
-      const w0 = this.currentWeights.dense_0;
-      const inputActs = this.currentActivations.input;
-      let edgeIdx = 0;
-      for (let i = 0; i < this.inputSize; i++) {
-        const inputValue = inputActs ? inputActs[i] || 0 : 0;
-        for (let j = 0; j < this.hiddenSize; j++) {
-          const weight = w0[i * this.hiddenSize + j] || 0;
-          const activation = inputValue * weight;
-          this.setEdgeAppearance(
-            this.edges.inputToHidden[edgeIdx],
-            weight,
-            activation,
-          );
-          edgeIdx++;
-        }
+    // Forward pass: output = softmax(hidden @ dense_1)
+    const preOutput = this.forwardDense(
+      hidden,
+      this.weights.dense_1,
+      this.hiddenSize,
+      this.outputSize,
+    );
+    const output = this.softmax(preOutput);
+
+    // Update node visuals
+    this.updateNodeVisuals(this.inputState, hidden, output);
+
+    // Update edge visuals
+    this.updateEdgeVisuals(this.inputState, hidden);
+  },
+
+  /**
+   * Matrix multiply: output[j] = sum_i(input[i] * weights[i * outSize + j])
+   * Weights are stored row-major: [inSize, outSize]
+   */
+  forwardDense(input, weights, inSize, outSize) {
+    const output = new Array(outSize).fill(0);
+    for (let j = 0; j < outSize; j++) {
+      for (let i = 0; i < inSize; i++) {
+        output[j] += input[i] * weights[i * outSize + j];
+      }
+    }
+    return output;
+  },
+
+  /**
+   * Softmax: exp(x_i) / sum(exp(x_j))
+   * With numerical stability: subtract max before exp
+   */
+  softmax(x) {
+    const max = Math.max(...x);
+    const exps = x.map((v) => Math.exp(v - max));
+    const sum = exps.reduce((a, b) => a + b, 0);
+    return exps.map((e) => e / sum);
+  },
+
+  updateNodeVisuals(input, hidden, output) {
+    // Input nodes: intensity = input value (0 or 1)
+    input.forEach((value, i) => {
+      if (this.nodes.input[i]) {
+        this.nodes.input[i].material.emissiveIntensity = value * 0.8;
+      }
+    });
+
+    // Hidden nodes: intensity = |tanh activation|
+    hidden.forEach((value, i) => {
+      if (this.nodes.hidden[i]) {
+        this.nodes.hidden[i].material.emissiveIntensity = Math.abs(value) * 0.8;
+      }
+    });
+
+    // Output nodes: intensity = softmax probability
+    output.forEach((value, i) => {
+      if (this.nodes.output[i]) {
+        this.nodes.output[i].material.emissiveIntensity = value * 0.8;
+      }
+    });
+  },
+
+  updateEdgeVisuals(input, hidden) {
+    // Input → hidden edges: activation = input[i] * weight[i,j]
+    let edgeIdx = 0;
+    for (let i = 0; i < this.inputSize; i++) {
+      for (let j = 0; j < this.hiddenSize; j++) {
+        const weight = this.weights.dense_0[i * this.hiddenSize + j];
+        const activation = input[i] * weight;
+        this.setEdgeAppearance(this.edges.inputToHidden[edgeIdx], activation);
+        edgeIdx++;
       }
     }
 
-    // Update hidden→output edges (activation = hidden * weight)
-    if (this.currentWeights.dense_1) {
-      const w1 = this.currentWeights.dense_1;
-      const hiddenActs = this.currentActivations.hidden;
-      let edgeIdx = 0;
-      for (let i = 0; i < this.hiddenSize; i++) {
-        const hiddenValue = hiddenActs ? hiddenActs[i] || 0 : 0;
-        for (let j = 0; j < this.outputSize; j++) {
-          const weight = w1[i * this.outputSize + j] || 0;
-          const activation = hiddenValue * weight;
-          this.setEdgeAppearance(
-            this.edges.hiddenToOutput[edgeIdx],
-            weight,
-            activation,
-          );
-          edgeIdx++;
-        }
+    // Hidden → output edges: activation = hidden[i] * weight[i,j]
+    edgeIdx = 0;
+    for (let i = 0; i < this.hiddenSize; i++) {
+      for (let j = 0; j < this.outputSize; j++) {
+        const weight = this.weights.dense_1[i * this.outputSize + j];
+        const activation = hidden[i] * weight;
+        this.setEdgeAppearance(this.edges.hiddenToOutput[edgeIdx], activation);
+        edgeIdx++;
       }
     }
   },
 
-  setEdgeAppearance(edge, weight, activation) {
+  setEdgeAppearance(edge, activation) {
     if (!edge) return;
 
     const absActivation = Math.min(Math.abs(activation), 2) / 2;
-    const isPositive = activation >= 0;
 
-    // Green for positive activation, red for negative, grey for zero/inactive
     if (Math.abs(activation) < 0.001) {
-      edge.material.color = new THREE.Color(0x444444);
+      // Inactive: dim grey
+      edge.material.color.setHex(0x444444);
       edge.material.opacity = 0.1;
+    } else if (activation >= 0) {
+      // Positive: green
+      edge.material.color.setHex(0x44ff44);
+      edge.material.opacity = 0.15 + absActivation * 0.7;
     } else {
-      const color = isPositive
-        ? new THREE.Color(0x44ff44)
-        : new THREE.Color(0xff4444);
-      edge.material.color = color;
+      // Negative: red
+      edge.material.color.setHex(0xff4444);
       edge.material.opacity = 0.15 + absActivation * 0.7;
     }
   },
 
   rebuildNetwork() {
-    // Remove existing nodes and edges
+    // Remove existing hidden nodes and all edges
     this.nodes.hidden.forEach((n) => this.scene.remove(n));
     this.edges.inputToHidden.forEach((e) => this.scene.remove(e));
     this.edges.hiddenToOutput.forEach((e) => this.scene.remove(e));
@@ -305,7 +342,7 @@ export const DigitalTwin = {
     this.edges.inputToHidden = [];
     this.edges.hiddenToOutput = [];
 
-    // Recreate hidden nodes (3x3 grid)
+    // Recreate hidden nodes
     const nodeGeometry = new THREE.SphereGeometry(0.15, 16, 16);
     for (let i = 0; i < this.hiddenSize; i++) {
       const row = Math.floor(i / 3);
@@ -365,15 +402,11 @@ export const DigitalTwin = {
       const node = intersects[0].object;
       const index = node.userData.index;
 
-      // Toggle input state
+      // Toggle input state (client-side only)
       this.inputState[index] = this.inputState[index] === 0 ? 1 : 0;
 
-      // Update visual
-      const value = this.inputState[index];
-      node.material.emissiveIntensity = value * 0.8;
-
-      // Send to server
-      this.pushEvent("set_input", { input: this.inputState });
+      // Recalculate and update visualisation
+      this.updateVisualisation();
     }
   },
 

@@ -6,14 +6,12 @@ defmodule NeonPerceptron.Model25 do
 
   Architecture: 25 inputs (5×5 pixel grid) → hidden layer (configurable) → 10 outputs
 
-  This model is designed for:
-  - Interactive input from the web UI (drawing on a 5×5 grid)
-  - Real-time visualisation of activations and weights
-  - Training on downsampled MNIST data (future)
+  The server trains continuously and broadcasts weight updates to the web UI.
+  The JS client owns the input state and calculates activations locally using
+  the received weights, creating an exact replica of the model's forward pass.
   """
 
   @training_log_interval 5_000
-  @display_update_interval 1
   @web_broadcast_interval 33
 
   def start_link(opts \\ []) do
@@ -38,9 +36,7 @@ defmodule NeonPerceptron.Model25 do
        init_fn: init_fn,
        step_fn: step_fn,
        predict_fn: predict_fn,
-       step_state: step_state,
-       activations: null_activations(hidden_size),
-       web_input: List.duplicate(0.0, 25)
+       step_state: step_state
      }, {:continue, :start_training}}
   end
 
@@ -62,11 +58,6 @@ defmodule NeonPerceptron.Model25 do
   end
 
   @impl true
-  def handle_call(:activations, _from, state) do
-    {:reply, state.activations, state}
-  end
-
-  @impl true
   def handle_call(:topology, _from, state) do
     topology = %{
       input_size: 25,
@@ -84,75 +75,16 @@ defmodule NeonPerceptron.Model25 do
   end
 
   @impl true
-  def handle_cast({:calc_layer_activations, :input, input}, state) do
-    kernel = get_kernel(state.step_state.model_state, "dense_0")
-
-    dense_0_activations =
-      input
-      |> Nx.transpose()
-      |> Nx.broadcast(Nx.shape(kernel))
-      |> Nx.multiply(kernel)
-      |> Nx.to_flat_list()
-
-    activations =
-      Map.merge(state.activations, %{input: Nx.to_flat_list(input), dense_0: dense_0_activations})
-
-    {:noreply, %{state | activations: activations}}
-  end
-
-  @impl true
-  def handle_cast({:calc_layer_activations, :hidden_0, hidden_0}, state) do
-    kernel = get_kernel(state.step_state.model_state, "dense_1")
-
-    dense_1_activations =
-      hidden_0
-      |> Nx.transpose()
-      |> Nx.broadcast(Nx.shape(kernel))
-      |> Nx.multiply(kernel)
-      |> Nx.transpose()
-      |> Nx.to_flat_list()
-
-    activations =
-      Map.merge(state.activations, %{
-        hidden_0: Nx.to_flat_list(hidden_0),
-        dense_1: dense_1_activations
-      })
-
-    {:noreply, %{state | activations: activations}}
-  end
-
-  @impl true
-  def handle_cast({:calc_layer_activations, :output, output}, state) do
-    activations = Map.merge(state.activations, %{output: Nx.to_flat_list(output)})
-    {:noreply, %{state | activations: activations}}
-  end
-
-  @impl true
-  def handle_cast({:predict, input}, state) do
-    predict_helper(input, state)
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_cast({:set_web_input, input}, state) do
-    {:noreply, %{state | web_input: input}}
-  end
-
-  @impl true
   def handle_info(:train_step, state) do
     step_state = state.step_fn.(state.training_data, state.step_state)
     iteration = Nx.to_number(step_state.i)
 
     if rem(iteration, @training_log_interval) == 0 do
-      print_param_summary(step_state, state.activations)
-    end
-
-    if rem(iteration, @display_update_interval) == 0 do
-      GenServer.cast(__MODULE__, {:predict, state.web_input})
+      print_training_summary(step_state)
     end
 
     if rem(iteration, @web_broadcast_interval) == 0 do
-      broadcast_to_web(state)
+      broadcast_weights(state.hidden_size, step_state.model_state)
     end
 
     schedule_training_step()
@@ -161,33 +93,25 @@ defmodule NeonPerceptron.Model25 do
 
   @doc """
   Create a fully-connected MLP for 5×5 pixel input classification.
+
+  Architecture: input[25] → dense → tanh → dense → softmax → output[10]
+
+  Design choices for the digital twin visualisation:
+  - No biases: simplifies the model to just weight matrices, making the
+    relationship between inputs and outputs clearer to visualise
+  - tanh activation: bounded [-1, 1] output maps nicely to visual intensity,
+    and bipolar values allow clear positive/negative edge distinction
+  - No layer norm: unnecessary for this small network, and removes extra
+    parameters that would need to be sent to the JS client
+  - The forward pass can be replicated exactly in JS with just two matrix
+    multiplies: hidden = tanh(input @ dense_0), output = softmax(hidden @ dense_1)
   """
   def new(hidden_layer_size) do
     Axon.input("pixels", shape: {nil, 25})
-    |> calc_layer_activations_hook(:input)
-    |> Axon.dense(hidden_layer_size)
+    |> Axon.dense(hidden_layer_size, use_bias: false)
     |> Axon.tanh()
-    |> calc_layer_activations_hook(:hidden_0)
-    |> Axon.dense(10)
-    |> Axon.layer_norm()
-    |> Axon.activation(:softmax)
-    |> calc_layer_activations_hook(:output)
-  end
-
-  defp get_kernel(model_state, layer_name) do
-    %{data: %{^layer_name => %{"kernel" => kernel}}} = model_state
-    kernel
-  end
-
-  defp calc_layer_activations_hook(model, layer) do
-    Axon.attach_hook(
-      model,
-      fn value ->
-        GenServer.cast(__MODULE__, {:calc_layer_activations, layer, value})
-      end,
-      on: :forward,
-      mode: :inference
-    )
+    |> Axon.dense(10, use_bias: false)
+    |> Axon.softmax()
   end
 
   @doc """
@@ -226,10 +150,7 @@ defmodule NeonPerceptron.Model25 do
     Map.get(patterns, digit)
   end
 
-  def print_param_summary(step_state, activations) do
-    %{input: input, dense_0: dense_0, hidden_0: hidden_0, dense_1: dense_1, output: softmax_0} =
-      activations
-
+  defp print_training_summary(step_state) do
     IO.puts("\nIteration: #{Nx.to_number(step_state.i)}")
 
     loss =
@@ -249,57 +170,29 @@ defmodule NeonPerceptron.Model25 do
     |> Float.round(2)
     |> then(&"Accuracy: #{&1}%")
     |> IO.puts()
-
-    IO.puts("  Input: min=#{Enum.min(input)}, max=#{Enum.max(input)}")
-
-    IO.puts(
-      "  Dense 0: min=#{Float.round(Enum.min(dense_0), 2)}, max=#{Float.round(Enum.max(dense_0), 2)}"
-    )
-
-    IO.puts(
-      "  Hidden 0: min=#{Float.round(Enum.min(hidden_0), 2)}, max=#{Float.round(Enum.max(hidden_0), 2)}"
-    )
-
-    IO.puts(
-      "  Dense 1: min=#{Float.round(Enum.min(dense_1), 2)}, max=#{Float.round(Enum.max(dense_1), 2)}"
-    )
-
-    IO.puts(
-      "  Softmax 0: min=#{Float.round(Enum.min(softmax_0), 2)}, max=#{Float.round(Enum.max(softmax_0), 2)}"
-    )
-
-    activation_list = activations |> Map.delete(:input) |> Map.values() |> List.flatten()
-
-    IO.puts(
-      "  Overall (excl. input): min=#{Float.round(Enum.min(activation_list), 2)}, max=#{Float.round(Enum.max(activation_list), 2)}"
-    )
   end
 
-  def activations, do: GenServer.call(__MODULE__, :activations)
   def topology, do: GenServer.call(__MODULE__, :topology)
   def predict(input), do: GenServer.call(__MODULE__, {:predict, input})
   def iteration, do: GenServer.call(__MODULE__, :iteration)
   def reset, do: GenServer.call(__MODULE__, :reset)
 
-  def set_web_input(input) when is_list(input) do
-    GenServer.cast(__MODULE__, {:set_web_input, input})
-  end
-
-  defp broadcast_to_web(state) do
+  # Broadcast weights to the web UI via PubSub.
+  # The JS client uses these to calculate activations locally.
+  defp broadcast_weights(hidden_size, model_state) do
     if pubsub_available?() do
-      weights = extract_weights(state.step_state.model_state)
+      weights = extract_weights(model_state)
 
       data = %{
-        activations: state.activations,
         weights: weights,
         topology: %{
           input_size: 25,
-          hidden_size: state.hidden_size,
+          hidden_size: hidden_size,
           output_size: 10
         }
       }
 
-      Phoenix.PubSub.broadcast(NeonPerceptron.PubSub, "activations", {:activations, data})
+      Phoenix.PubSub.broadcast(NeonPerceptron.PubSub, "weights", {:weights, data})
     end
   end
 
@@ -310,6 +203,10 @@ defmodule NeonPerceptron.Model25 do
     end
   end
 
+  # Extract weight matrices for the JS digital twin.
+  # Since use_bias: false, we only have kernels (no bias vectors).
+  # dense_0: [25, hidden_size] flattened row-major
+  # dense_1: [hidden_size, 10] flattened row-major
   defp extract_weights(model_state) do
     %{data: data} = model_state
 
@@ -321,16 +218,6 @@ defmodule NeonPerceptron.Model25 do
 
   defp schedule_training_step do
     Process.send_after(self(), :train_step, 1)
-  end
-
-  def null_activations(hidden_size) do
-    %{
-      input: List.duplicate(0.0, 25),
-      dense_0: List.duplicate(0.0, 25 * hidden_size),
-      hidden_0: List.duplicate(0.0, hidden_size),
-      dense_1: List.duplicate(0.0, hidden_size * 10),
-      output: List.duplicate(0.0, 10)
-    }
   end
 
   defp predict_helper(input, state) do
