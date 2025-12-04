@@ -1,5 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { Line2 } from "three/addons/lines/Line2.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 
 /**
  * Digital Twin visualisation of the neural network.
@@ -172,14 +175,18 @@ export const DigitalTwin = {
   },
 
   createEdge(from, to) {
-    const points = [from.clone(), to.clone()];
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({
+    const geometry = new LineGeometry();
+    geometry.setPositions([from.x, from.y, from.z, to.x, to.y, to.z]);
+
+    const material = new LineMaterial({
       color: 0x444444,
+      linewidth: 2,
       transparent: true,
       opacity: 0.3,
+      resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
     });
-    return new THREE.Line(geometry, material);
+
+    return new Line2(geometry, material);
   },
 
   onWeightsReceived(data) {
@@ -318,17 +325,20 @@ export const DigitalTwin = {
     const absActivation = Math.min(Math.abs(activation), 2) / 2;
 
     if (Math.abs(activation) < 0.001) {
-      // Inactive: dim grey
+      // Inactive: dim grey, thin
       edge.material.color.setHex(0x444444);
       edge.material.opacity = 0.1;
+      edge.material.linewidth = 1;
     } else if (activation >= 0) {
-      // Positive: green
+      // Positive: green, brightness and thickness based on magnitude
       edge.material.color.setHex(0x44ff44);
-      edge.material.opacity = 0.15 + absActivation * 0.7;
+      edge.material.opacity = 0.3 + absActivation * 0.7;
+      edge.material.linewidth = 1 + absActivation * 4;
     } else {
-      // Negative: red
+      // Negative: red, brightness and thickness based on magnitude
       edge.material.color.setHex(0xff4444);
-      edge.material.opacity = 0.15 + absActivation * 0.7;
+      edge.material.opacity = 0.3 + absActivation * 0.7;
+      edge.material.linewidth = 1 + absActivation * 4;
     }
   },
 
@@ -415,6 +425,19 @@ export const DigitalTwin = {
     this.camera.aspect = container.clientWidth / container.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(container.clientWidth, container.clientHeight);
+
+    // Update line material resolutions
+    const resolution = new THREE.Vector2(
+      container.clientWidth,
+      container.clientHeight,
+    );
+    [...this.edges.inputToHidden, ...this.edges.hiddenToOutput].forEach(
+      (edge) => {
+        if (edge?.material?.resolution) {
+          edge.material.resolution.copy(resolution);
+        }
+      },
+    );
   },
 
   animate() {
