@@ -63,7 +63,50 @@ export const DigitalTwin = {
 
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
-    this.renderer.domElement.addEventListener("click", (e) => this.onClick(e));
+    this.isDrawing = false;
+
+    this.renderer.domElement.addEventListener("mousedown", (e) => {
+      if (this.hitTestInput(e)) {
+        this.isDrawing = true;
+        this.controls.enabled = false;
+        this.onDraw(e);
+      }
+    });
+    this.renderer.domElement.addEventListener("mousemove", (e) => {
+      if (this.isDrawing) this.onDraw(e);
+    });
+    this.renderer.domElement.addEventListener("mouseup", () => {
+      this.isDrawing = false;
+      this.controls.enabled = true;
+    });
+    this.renderer.domElement.addEventListener("mouseleave", () => {
+      this.isDrawing = false;
+      this.controls.enabled = true;
+    });
+
+    // Create reset button as HUD overlay
+    this.createResetButton();
+  },
+
+  createResetButton() {
+    const button = document.createElement("button");
+    button.textContent = "Reset";
+    button.style.cssText = `
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      padding: 10px 20px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #666;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      z-index: 100;
+    `;
+    button.addEventListener("click", () => this.resetInput());
+    this.el.style.position = "relative";
+    this.el.appendChild(button);
   },
 
   initNetwork(topology) {
@@ -89,9 +132,10 @@ export const DigitalTwin = {
   },
 
   createNodes() {
-    const nodeGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+    // Input layer (5×5 grid of flat squares forming a drawing surface)
+    const pixelSize = 0.45;
+    const pixelGeometry = new THREE.PlaneGeometry(pixelSize, pixelSize);
 
-    // Input layer (5×5 grid)
     for (let i = 0; i < this.inputSize; i++) {
       const row = Math.floor(i / 5);
       const col = i % 5;
@@ -101,14 +145,18 @@ export const DigitalTwin = {
       const material = new THREE.MeshStandardMaterial({
         color: 0x4488ff,
         emissive: 0x4488ff,
-        emissiveIntensity: 0.1,
+        emissiveIntensity: 0.0,
+        side: THREE.DoubleSide,
       });
-      const node = new THREE.Mesh(nodeGeometry, material);
+      const node = new THREE.Mesh(pixelGeometry, material);
       node.position.set(this.layerX.input, y, z);
+      node.rotation.y = Math.PI / 2; // Face the camera (rotate to YZ plane)
       node.userData = { layer: "input", index: i };
       this.scene.add(node);
       this.nodes.input.push(node);
     }
+
+    const nodeGeometry = new THREE.SphereGeometry(0.15, 16, 16);
 
     // Hidden layer (arranged in rows of 3)
     for (let i = 0; i < this.hiddenSize; i++) {
@@ -273,10 +321,10 @@ export const DigitalTwin = {
   },
 
   updateNodeVisuals(input, hidden, output) {
-    // Input nodes: intensity = input value (0 or 1)
+    // Input pixels: intensity = input value (0 to 1, continuous)
     input.forEach((value, i) => {
       if (this.nodes.input[i]) {
-        this.nodes.input[i].material.emissiveIntensity = value * 0.8;
+        this.nodes.input[i].material.emissiveIntensity = value;
       }
     });
 
@@ -398,7 +446,25 @@ export const DigitalTwin = {
     }
   },
 
-  onClick(event) {
+  resetInput() {
+    if (!this.networkInitialized) return;
+    this.inputState.fill(0);
+    this.updateVisualisation();
+  },
+
+  hitTestInput(event) {
+    if (!this.networkInitialized) return false;
+
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.nodes.input);
+    return intersects.length > 0;
+  },
+
+  onDraw(event) {
     if (!this.networkInitialized) return;
 
     const rect = this.renderer.domElement.getBoundingClientRect();
@@ -412,8 +478,9 @@ export const DigitalTwin = {
       const node = intersects[0].object;
       const index = node.userData.index;
 
-      // Toggle input state (client-side only)
-      this.inputState[index] = this.inputState[index] === 0 ? 1 : 0;
+      // Gradually increase activation (0 to 1) while drawing
+      const increment = 0.15;
+      this.inputState[index] = Math.min(1, this.inputState[index] + increment);
 
       // Recalculate and update visualisation
       this.updateVisualisation();
