@@ -4,6 +4,119 @@ import { Line2 } from "three/addons/lines/Line2.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 
+const SEVEN_SEGMENT_PATTERNS = [
+  [1, 1, 1, 1, 1, 1, 0], // 0: a,b,c,d,e,f
+  [0, 1, 1, 0, 0, 0, 0], // 1: b,c
+  [1, 1, 0, 1, 1, 0, 1], // 2: a,b,d,e,g
+  [1, 1, 1, 1, 0, 0, 1], // 3: a,b,c,d,g
+  [0, 1, 1, 0, 0, 1, 1], // 4: b,c,f,g
+  [1, 0, 1, 1, 0, 1, 1], // 5: a,c,d,f,g
+  [1, 0, 1, 1, 1, 1, 1], // 6: a,c,d,e,f,g
+  [1, 1, 1, 0, 0, 0, 0], // 7: a,b,c
+  [1, 1, 1, 1, 1, 1, 1], // 8: all
+  [1, 1, 1, 1, 0, 1, 1], // 9: a,b,c,d,f,g
+];
+
+function createSevenSegmentGroup(digit, size = 0.4) {
+  const group = new THREE.Group();
+
+  // Backing panel dimensions
+  const panelWidth = size * 0.7;
+  const panelHeight = size * 1.1;
+  const panelDepth = size * 0.08;
+
+  // Create dark backing panel with bevelled edge effect
+  const panelGeometry = new THREE.BoxGeometry(
+    panelWidth,
+    panelHeight,
+    panelDepth,
+  );
+  const panelMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0a0a0a,
+    roughness: 0.8,
+    metalness: 0.1,
+  });
+  const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+  panel.position.z = -panelDepth / 2;
+  group.add(panel);
+
+  // Inner recessed area (slightly lighter, creates depth)
+  const innerWidth = panelWidth * 0.85;
+  const innerHeight = panelHeight * 0.9;
+  const innerGeometry = new THREE.PlaneGeometry(innerWidth, innerHeight);
+  const innerMaterial = new THREE.MeshStandardMaterial({
+    color: 0x111111,
+    roughness: 0.9,
+    side: THREE.DoubleSide,
+  });
+  const innerPanel = new THREE.Mesh(innerGeometry, innerMaterial);
+  innerPanel.position.z = 0.001;
+  group.add(innerPanel);
+
+  // Segment dimensions - classic elongated hexagon style
+  const segmentLength = size * 0.28;
+  const segmentThickness = size * 0.06;
+  const halfHeight = size * 0.38;
+  const halfWidth = segmentLength / 2 + segmentThickness * 0.3;
+
+  // Create segment shape (elongated hexagon for that classic LED look)
+  const segmentShape = new THREE.Shape();
+  const sl = segmentLength / 2;
+  const st = segmentThickness / 2;
+  const taper = st * 0.7;
+  segmentShape.moveTo(-sl + taper, 0);
+  segmentShape.lineTo(-sl, st);
+  segmentShape.lineTo(sl, st);
+  segmentShape.lineTo(sl + taper, 0);
+  segmentShape.lineTo(sl, -st);
+  segmentShape.lineTo(-sl, -st);
+  segmentShape.closePath();
+
+  const segmentGeometry = new THREE.ShapeGeometry(segmentShape);
+  const vertSegmentGeometry = segmentGeometry.clone();
+  vertSegmentGeometry.rotateZ(Math.PI / 2);
+
+  const segments = [];
+  const positions = [
+    // a: top horizontal
+    { x: 0, y: halfHeight, geom: segmentGeometry },
+    // b: top-right vertical
+    { x: halfWidth, y: halfHeight / 2, geom: vertSegmentGeometry },
+    // c: bottom-right vertical
+    { x: halfWidth, y: -halfHeight / 2, geom: vertSegmentGeometry },
+    // d: bottom horizontal
+    { x: 0, y: -halfHeight, geom: segmentGeometry },
+    // e: bottom-left vertical
+    { x: -halfWidth, y: -halfHeight / 2, geom: vertSegmentGeometry },
+    // f: top-left vertical
+    { x: -halfWidth, y: halfHeight / 2, geom: vertSegmentGeometry },
+    // g: middle horizontal
+    { x: 0, y: 0, geom: segmentGeometry },
+  ];
+
+  const pattern = SEVEN_SEGMENT_PATTERNS[digit];
+  for (let i = 0; i < 7; i++) {
+    const isOn = pattern[i] === 1;
+    // Classic red-orange LED colour
+    const material = new THREE.MeshStandardMaterial({
+      color: isOn ? 0xff3300 : 0x1a0800,
+      emissive: 0xff3300,
+      emissiveIntensity: isOn ? 1.0 : 0.02,
+      roughness: 0.3,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+    });
+    const segment = new THREE.Mesh(positions[i].geom.clone(), material);
+    segment.position.set(positions[i].x, positions[i].y, 0.01);
+    segment.userData = { segmentIndex: i, isOn };
+    segments.push(segment);
+    group.add(segment);
+  }
+
+  group.userData = { segments, digit };
+  return group;
+}
+
 /**
  * Digital Twin visualisation of the neural network.
  *
@@ -84,17 +197,31 @@ export const DigitalTwin = {
       this.controls.enabled = true;
     });
 
-    // Create reset button as HUD overlay
-    this.createResetButton();
+    // Create HUD controls overlay
+    this.createControls();
+
+    // Default gamma value for wire brightness (2.2 is standard sRGB gamma)
+    this.wireGamma = 2.2;
   },
 
-  createResetButton() {
-    const button = document.createElement("button");
-    button.textContent = "Reset";
-    button.style.cssText = `
+  createControls() {
+    this.el.style.position = "relative";
+
+    const controlsContainer = document.createElement("div");
+    controlsContainer.style.cssText = `
       position: absolute;
       top: 20px;
       left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 100;
+    `;
+
+    // Reset button
+    const button = document.createElement("button");
+    button.textContent = "Reset";
+    button.style.cssText = `
       padding: 10px 20px;
       background: #333;
       color: #fff;
@@ -102,11 +229,44 @@ export const DigitalTwin = {
       border-radius: 4px;
       cursor: pointer;
       font-size: 14px;
-      z-index: 100;
     `;
     button.addEventListener("click", () => this.resetInput());
-    this.el.style.position = "relative";
-    this.el.appendChild(button);
+
+    // Gamma slider container
+    const sliderContainer = document.createElement("div");
+    sliderContainer.style.cssText = `
+      background: #333;
+      padding: 10px;
+      border: 1px solid #666;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 12px;
+    `;
+
+    const sliderLabel = document.createElement("label");
+    sliderLabel.textContent = "Wire gamma: 2.2";
+    sliderLabel.style.display = "block";
+    sliderLabel.style.marginBottom = "5px";
+
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = "0.5";
+    slider.max = "4.0";
+    slider.step = "0.1";
+    slider.value = "2.2";
+    slider.style.width = "120px";
+    slider.addEventListener("input", (e) => {
+      this.wireGamma = parseFloat(e.target.value);
+      sliderLabel.textContent = `Wire gamma: ${this.wireGamma.toFixed(1)}`;
+      this.updateVisualisation();
+    });
+
+    sliderContainer.appendChild(sliderLabel);
+    sliderContainer.appendChild(slider);
+
+    controlsContainer.appendChild(button);
+    controlsContainer.appendChild(sliderContainer);
+    this.el.appendChild(controlsContainer);
   },
 
   initNetwork(topology) {
@@ -177,20 +337,21 @@ export const DigitalTwin = {
       this.nodes.hidden.push(node);
     }
 
-    // Output layer (vertical line, labelled 0-9)
+    // Output layer (7-segment displays arranged in a circle)
+    const circleRadius = 1.2;
     for (let i = 0; i < this.outputSize; i++) {
-      const y = ((this.outputSize - 1) / 2 - i) * 0.5;
+      // Arrange in circle, starting from top (0 at top, going clockwise)
+      const angle = (i / this.outputSize) * Math.PI * 2 - Math.PI / 2;
+      const y = Math.sin(angle) * circleRadius;
+      const z = Math.cos(angle) * circleRadius;
 
-      const material = new THREE.MeshStandardMaterial({
-        color: 0xff8844,
-        emissive: 0xff8844,
-        emissiveIntensity: 0.1,
-      });
-      const node = new THREE.Mesh(nodeGeometry, material);
-      node.position.set(this.layerX.output, y, 0);
-      node.userData = { layer: "output", index: i };
-      this.scene.add(node);
-      this.nodes.output.push(node);
+      const display = createSevenSegmentGroup(i, 0.35);
+      display.position.set(this.layerX.output, y, z);
+      display.rotation.y = Math.PI / 2;
+      display.userData.layer = "output";
+      display.userData.index = i;
+      this.scene.add(display);
+      this.nodes.output.push(display);
     }
   },
 
@@ -335,11 +496,28 @@ export const DigitalTwin = {
       }
     });
 
-    // Output nodes: intensity = softmax probability
-    output.forEach((value, i) => {
-      if (this.nodes.output[i]) {
-        this.nodes.output[i].material.emissiveIntensity = value * 0.8;
-      }
+    // Output nodes: 7-segment displays with brightness modulated by softmax probability
+    output.forEach((activation, i) => {
+      const display = this.nodes.output[i];
+      if (!display || !display.userData.segments) return;
+
+      const digit = display.userData.digit;
+      const pattern = SEVEN_SEGMENT_PATTERNS[digit];
+
+      display.userData.segments.forEach((segment, segIdx) => {
+        const isOn = pattern[segIdx] === 1;
+        if (isOn) {
+          // "On" segments: brightness scales with activation
+          const intensity = 0.15 + activation * 0.85;
+          segment.material.emissiveIntensity = intensity;
+          // Also brighten the base colour for more punch
+          segment.material.color.setHex(activation > 0.3 ? 0xff3300 : 0x661400);
+        } else {
+          // "Off" segments stay very dim
+          segment.material.emissiveIntensity = 0.02;
+          segment.material.color.setHex(0x1a0800);
+        }
+      });
     });
   },
 
@@ -370,7 +548,14 @@ export const DigitalTwin = {
   setEdgeAppearance(edge, activation) {
     if (!edge) return;
 
+    // Normalise activation to 0-1 range (clamp at magnitude 2)
     const absActivation = Math.min(Math.abs(activation), 2) / 2;
+
+    // Apply gamma correction: perceived = actual^(1/gamma)
+    // Higher gamma = darker wires (need more activation to appear bright)
+    // This makes perceived brightness roughly linear with activation value
+    const gamma = this.wireGamma || 2.2;
+    const corrected = Math.pow(absActivation, 1 / gamma);
 
     if (Math.abs(activation) < 0.001) {
       // Inactive: dim grey, thin
@@ -378,15 +563,15 @@ export const DigitalTwin = {
       edge.material.opacity = 0.1;
       edge.material.linewidth = 1;
     } else if (activation >= 0) {
-      // Positive: green, brightness and thickness based on magnitude
+      // Positive: green, brightness and thickness based on gamma-corrected magnitude
       edge.material.color.setHex(0x44ff44);
-      edge.material.opacity = 0.3 + absActivation * 0.7;
-      edge.material.linewidth = 1 + absActivation * 4;
+      edge.material.opacity = 0.15 + corrected * 0.85;
+      edge.material.linewidth = 1 + corrected * 4;
     } else {
-      // Negative: red, brightness and thickness based on magnitude
+      // Negative: red, brightness and thickness based on gamma-corrected magnitude
       edge.material.color.setHex(0xff4444);
-      edge.material.opacity = 0.3 + absActivation * 0.7;
-      edge.material.linewidth = 1 + absActivation * 4;
+      edge.material.opacity = 0.15 + corrected * 0.85;
+      edge.material.linewidth = 1 + corrected * 4;
     }
   },
 
