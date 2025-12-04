@@ -25,6 +25,11 @@ defmodule NeonPerceptronWeb.DigitalTwinLive do
   end
 
   @impl true
+  def handle_event("set_input", _params, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info({:weights, data}, socket) do
     {:noreply, push_event(socket, "weights", data)}
   end
