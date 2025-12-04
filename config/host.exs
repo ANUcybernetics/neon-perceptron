@@ -19,7 +19,10 @@ config :neon_perceptron, NeonPerceptronWeb.Endpoint,
   live_view: [signing_salt: "neon_perceptron_salt"],
   render_errors: [formats: [html: NeonPerceptronWeb.ErrorHTML], layout: false],
   pubsub_server: NeonPerceptron.PubSub,
-  server: true
+  server: true,
+  watchers: [
+    esbuild: {Esbuild, :install_and_run, [:neon_perceptron, ~w(--sourcemap=inline --watch)]}
+  ]
 
 config :esbuild,
   version: "0.17.11",
