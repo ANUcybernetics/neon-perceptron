@@ -560,17 +560,17 @@ export const DigitalTwin = {
     if (Math.abs(activation) < 0.001) {
       // Inactive: dim grey, thin
       edge.material.color.setHex(0x444444);
-      edge.material.opacity = 0.1;
+      edge.material.opacity = 0.05;
       edge.material.linewidth = 1;
     } else if (activation >= 0) {
       // Positive: green, brightness and thickness based on gamma-corrected magnitude
       edge.material.color.setHex(0x44ff44);
-      edge.material.opacity = 0.15 + corrected * 0.85;
+      edge.material.opacity = 0.1 + corrected * 0.5;
       edge.material.linewidth = 1 + corrected * 4;
     } else {
       // Negative: red, brightness and thickness based on gamma-corrected magnitude
       edge.material.color.setHex(0xff4444);
-      edge.material.opacity = 0.15 + corrected * 0.85;
+      edge.material.opacity = 0.1 + corrected * 0.5;
       edge.material.linewidth = 1 + corrected * 4;
     }
   },
