@@ -13,6 +13,7 @@ defmodule NeonPerceptronWeb.Router do
   scope "/", NeonPerceptronWeb do
     pipe_through(:browser)
 
-    live("/", DigitalTwinLive)
+    live("/digital-twin", DigitalTwinLive)
+    live("/ui", KioskLive)
   end
 end

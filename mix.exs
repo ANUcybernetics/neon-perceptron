@@ -49,14 +49,18 @@ defmodule NeonPerceptron.MixProject do
       {:emlx, github: "elixir-nx/emlx", branch: "main", targets: :host},
       {:scidata, "~> 0.1", only: :test},
       {:nx_image, "~> 0.1.0", only: :test},
+      {:lazy_html, ">= 0.1.0", only: :test},
 
-      # Phoenix (host only, for digital twin visualisation)
-      {:phoenix, "~> 1.7", targets: :host},
-      {:phoenix_live_view, "~> 1.0", targets: :host},
-      {:phoenix_html, "~> 4.1", targets: :host},
-      {:esbuild, "~> 0.8", runtime: false, targets: :host},
+      # Phoenix (web UI on host and kiosk on target)
+      {:phoenix, "~> 1.7"},
+      {:phoenix_live_view, "~> 1.0"},
+      {:phoenix_html, "~> 4.1"},
+      {:esbuild, "~> 0.8", runtime: false},
       {:jason, "~> 1.4"},
-      {:plug_cowboy, "~> 2.7", targets: :host},
+      {:plug_cowboy, "~> 2.7"},
+
+      # Kiosk display (Weston + Cog browser management)
+      {:muontrap, "~> 1.7"},
 
       # Development tools
       {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},
@@ -74,7 +78,7 @@ defmodule NeonPerceptron.MixProject do
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
       # version updates, please review their release notes in case
       # changes to your application are needed.
-      {:nerves_system_rpi4, "~> 1.31", runtime: false, targets: :rpi4}
+      {:kiosk_system_rpi4, "~> 2.0", runtime: false, targets: :rpi4}
     ]
   end
 

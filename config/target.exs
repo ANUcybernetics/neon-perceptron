@@ -20,6 +20,20 @@ config :neon_perceptron, hardware_required: true
 
 config :shoehorn, init: [:nerves_runtime, :nerves_pack]
 
+# Phoenix configuration (kiosk browser points to this)
+config :neon_perceptron, NeonPerceptronWeb.Endpoint,
+  url: [host: "localhost"],
+  adapter: Phoenix.Endpoint.Cowboy2Adapter,
+  http: [ip: {127, 0, 0, 1}, port: 4000],
+  check_origin: false,
+  secret_key_base: "neon_perceptron_dev_secret_key_base_at_least_64_bytes_long_for_security",
+  live_view: [signing_salt: "neon_perceptron_salt"],
+  render_errors: [formats: [html: NeonPerceptronWeb.ErrorHTML], layout: false],
+  pubsub_server: NeonPerceptron.PubSub,
+  server: true
+
+config :nerves_runtime, startup_guard_enabled: true
+
 # Erlinit can be configured without a rootfs_overlay. See
 # https://github.com/nerves-project/erlinit/ for more information on
 # configuring erlinit.

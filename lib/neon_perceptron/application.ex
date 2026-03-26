@@ -23,21 +23,30 @@ defmodule NeonPerceptron.Application do
   end
 
   # List all child processes to be supervised
+  defp phoenix_children do
+    [
+      {Phoenix.PubSub, name: NeonPerceptron.PubSub},
+      NeonPerceptronWeb.Endpoint
+    ]
+  end
+
   if Mix.target() == :host do
     defp target_children do
       [
-        # Use 25-input model for digital twin on host
-        {NeonPerceptron.Model25, [hidden_size: 9]},
-        {Phoenix.PubSub, name: NeonPerceptron.PubSub},
-        NeonPerceptronWeb.Endpoint
+        {NeonPerceptron.Model25, [hidden_size: 9]}
+        | phoenix_children()
       ]
     end
   else
     defp target_children do
       [
-        # Use 7-input model on device (for physical hardware)
         NeonPerceptron.Model
+        | phoenix_children() ++ kiosk_children()
       ]
+    end
+
+    defp kiosk_children do
+      [NeonPerceptron.Kiosk.Supervisor]
     end
   end
 end
