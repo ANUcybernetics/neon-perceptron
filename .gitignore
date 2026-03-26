@@ -20,3 +20,8 @@ erl_crash.dump
 /tmp/
 
 /assets/node_modules/
+
+# Secrets
+.env
+.env.*
+.envrc

@@ -1,6 +1,8 @@
 [tools]
 erlang = "27.3.4.3"
 elixir = "1.18.4-otp-27"
+node = "latest"
+pnpm = "latest"
 
 [env]
 # MIX_TARGET = "rpi4"

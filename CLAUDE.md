@@ -12,7 +12,7 @@ Run the tests with `mix test`. Tests run on the `:host` target by default.
 
 Although this project is primarily designed to run on real hardware, there's a
 web-based Three.js-powered "Digital Twin" version which you can access at
-localhost:4000 after running `mix phx.server`. The main functinality is in
+localhost:4000 after running `mix phx.server`. The main functionality is in
 `assets/js/hooks/digital_twin.js`.
 
 <!-- usage-rules-start -->
