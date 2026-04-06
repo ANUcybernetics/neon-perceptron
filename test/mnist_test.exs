@@ -29,9 +29,49 @@ defmodule NeonPerceptron.MNISTTest do
            "Should have trained #{expected_count} models (m=#{@min_hidden} to m=#{@max_hidden})"
   end
 
+  test "compare 1HL vs 2HL architectures" do
+    {train_data, test_data} = load_mnist_data()
+
+    configs = [
+      {"1×8 (280 params)", :single, 8},
+      {"2×4 (156 params)", :double, {4, 4}},
+      {"2×7 (294 params)", :double, {7, 7}}
+    ]
+
+    results =
+      for {label, type, size} <- configs do
+        model = create_model(type, size)
+        trained_params = train_model(model, train_data, epochs: @epochs, batch_size: 128)
+        accuracy = calculate_accuracy(model, trained_params, test_data)
+        {label, Float.round(accuracy * 100, 1)}
+      end
+
+    IO.puts("\n1HL vs 2HL comparison (#{@epochs} epochs, no bias)")
+
+    for {label, acc} <- results do
+      IO.puts("  #{label}: #{acc}%")
+    end
+
+    assert length(results) == 3
+  end
+
   defp create_model(hidden_size) do
+    create_model(:single, hidden_size)
+  end
+
+  defp create_model(:single, hidden_size) do
     Axon.input("input", shape: {nil, 25})
     |> Axon.dense(hidden_size, use_bias: false, kernel_initializer: :he_normal)
+    |> Axon.tanh()
+    |> Axon.dense(10, use_bias: false, kernel_initializer: :glorot_uniform)
+    |> Axon.softmax()
+  end
+
+  defp create_model(:double, {h1, h2}) do
+    Axon.input("input", shape: {nil, 25})
+    |> Axon.dense(h1, use_bias: false, kernel_initializer: :he_normal)
+    |> Axon.tanh()
+    |> Axon.dense(h2, use_bias: false, kernel_initializer: :he_normal)
     |> Axon.tanh()
     |> Axon.dense(10, use_bias: false, kernel_initializer: :glorot_uniform)
     |> Axon.softmax()
