@@ -88,8 +88,6 @@ defmodule NeonPerceptron.Model do
   def handle_cast({:calc_layer_activations, :input, input}, state) do
     kernel = get_kernel(state.step_state.model_state, "dense_0")
 
-    # this is a bit "fake", because we ignore the bias
-    # TODO perhaps Axon can set the model to learn bias-less dense kernels?
     dense_0_activations =
       input
       |> Nx.transpose()
@@ -108,8 +106,6 @@ defmodule NeonPerceptron.Model do
   def handle_cast({:calc_layer_activations, :hidden_0, hidden_0}, state) do
     kernel = get_kernel(state.step_state.model_state, "dense_1")
 
-    # this is a bit "fake", because we ignore the bias
-    # TODO perhaps Axon can set the model to learn bias-less dense kernels?
     dense_1_activations =
       hidden_0
       |> Nx.transpose()
@@ -187,11 +183,10 @@ defmodule NeonPerceptron.Model do
   def new(hidden_layer_size) do
     Axon.input("bitlist", shape: {nil, 7})
     |> calc_layer_activations_hook(:input)
-    |> Axon.dense(hidden_layer_size)
+    |> Axon.dense(hidden_layer_size, use_bias: false)
     |> Axon.tanh()
     |> calc_layer_activations_hook(:hidden_0)
-    |> Axon.dense(10)
-    |> Axon.layer_norm()
+    |> Axon.dense(10, use_bias: false)
     |> Axon.activation(:softmax)
     |> calc_layer_activations_hook(:output)
   end
@@ -433,8 +428,8 @@ defmodule NeonPerceptron.Model do
     weights = Map.get(model_state, :data)
 
     %{
-      "dense_0" => %{"bias" => _bias_0, "kernel" => kernel_0},
-      "dense_1" => %{"bias" => _bias_1, "kernel" => kernel_1}
+      "dense_0" => %{"kernel" => kernel_0},
+      "dense_1" => %{"kernel" => kernel_1}
     } = weights
 
     input_vector = Nx.tensor(input, type: :f32)

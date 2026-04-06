@@ -31,12 +31,10 @@ defmodule NeonPerceptron.MNISTTest do
 
   defp create_model(hidden_size) do
     Axon.input("input", shape: {nil, 25})
-    |> Axon.dense(hidden_size,
-      activation: :relu,
-      use_bias: false,
-      kernel_initializer: :glorot_uniform
-    )
+    |> Axon.dense(hidden_size, use_bias: false, kernel_initializer: :he_normal)
+    |> Axon.tanh()
     |> Axon.dense(10, use_bias: false, kernel_initializer: :glorot_uniform)
+    |> Axon.softmax()
   end
 
   defp load_mnist_data do
@@ -110,7 +108,7 @@ defmodule NeonPerceptron.MNISTTest do
     loop =
       model
       |> Axon.Loop.trainer(
-        :mean_squared_error,
+        :categorical_cross_entropy,
         Polaris.Optimizers.adam(learning_rate: learning_rate)
       )
 
