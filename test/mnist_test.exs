@@ -112,7 +112,7 @@ defmodule NeonPerceptron.MNISTTest do
         Polaris.Optimizers.adam(learning_rate: learning_rate)
       )
 
-    Axon.Loop.run(loop, batched_data, Axon.ModelState.empty(), epochs: epochs, compiler: EMLX)
+    Axon.Loop.run(loop, batched_data, Axon.ModelState.empty(), epochs: epochs)
   end
 
   defp calculate_accuracy(model, trained_params, test_data) do
