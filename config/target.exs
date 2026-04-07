@@ -1,8 +1,7 @@
 import Config
 
-# Use NxEigen as the default Nx backend on the target (lightweight, no XLA needed).
-# Switch to EXLA if you need GPU acceleration or hit missing op coverage.
-config :nx, default_backend: NxEigen.Backend
+# Use the default Nx.BinaryBackend on the target for now.
+# NxEigen's precompiled NIF doesn't cross-compile cleanly for Nerves.
 
 # Use Ringlogger as the logger backend and remove :console.
 # See https://hexdocs.pm/ring_logger/readme.html for more information on

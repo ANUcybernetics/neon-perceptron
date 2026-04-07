@@ -1,11 +1,13 @@
 ---
-id: task-13
+id: TASK-13
 title: flash Nerves firmware to reTerminal DM eMMC
-status: In Progress
+status: Done
 assignee: []
-created_date: "2026-04-07"
+created_date: '2026-04-07'
+updated_date: '2026-04-07 08:27'
 labels: []
-dependencies: [task-4]
+dependencies:
+  - task-4
 ---
 
 Flash the Nerves firmware to the reTerminal DM's 32GB eMMC storage. The
@@ -76,3 +78,9 @@ sudo fwup neon_perceptron.fw -d /dev/sdX --yes
 
 - https://wiki.seeedstudio.com/reterminal-dm-flash-OS/
 - https://wiki.seeedstudio.com/reterminal-dm-hardware-guide/
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Firmware flashed to eMMC and booting successfully with frio_rpi4 system (OTP 27). DSI display, Weston, Cog, and Phoenix app all running. Required downgrade from kiosk_system_rpi4 (OTP 28) to frio_rpi4 (OTP 27) for DSI panel driver support. See task-14 for OTP 28 upgrade path.
+<!-- SECTION:NOTES:END -->
