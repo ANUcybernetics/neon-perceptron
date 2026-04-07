@@ -7,6 +7,7 @@ defmodule NeonPerceptron.Application do
 
   @impl true
   def start(_type, _args) do
+    prepare_hardware()
     children = common_children() ++ target_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -31,6 +32,8 @@ defmodule NeonPerceptron.Application do
   end
 
   if Mix.target() == :host do
+    defp prepare_hardware, do: :ok
+
     defp target_children do
       [
         {NeonPerceptron.Model25, [hidden_size: 9]}
@@ -38,6 +41,18 @@ defmodule NeonPerceptron.Application do
       ]
     end
   else
+    # The reTerminal DM's DSI display requires a vc4 driver reload before
+    # the DRM device fully initialises. Must happen before Weston starts.
+    # See https://github.com/formrausch/frio_rpi4
+    defp prepare_hardware do
+      if System.find_executable("modprobe") do
+        System.cmd("modprobe", ["-r", "vc4"])
+        Process.sleep(500)
+        System.cmd("modprobe", ["vc4"])
+        Process.sleep(1000)
+      end
+    end
+
     defp target_children do
       [
         NeonPerceptron.Model
