@@ -1,6 +1,6 @@
 [tools]
-erlang = "27.3.4.3"
-elixir = "1.18.4-otp-27"
+erlang = "28.3.1"
+elixir = "1.19.5-otp-28"
 node = "latest"
 pnpm = "latest"
 

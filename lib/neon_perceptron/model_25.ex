@@ -245,8 +245,10 @@ defmodule NeonPerceptron.Model25 do
     :ok
   end
 
-  defp emlx_eval(%Nx.Tensor{data: %EMLX.Backend{ref: {_device, ref}}}) when is_reference(ref) do
-    EMLX.NIF.eval(ref)
+  if Code.ensure_loaded?(EMLX.Backend) do
+    defp emlx_eval(%Nx.Tensor{data: %EMLX.Backend{ref: {_device, ref}}}) when is_reference(ref) do
+      EMLX.NIF.eval(ref)
+    end
   end
 
   defp emlx_eval(_), do: :ok
