@@ -45,12 +45,20 @@ defmodule NeonPerceptron.Application do
     # the DRM device fully initialises. Must happen before Weston starts.
     # See https://github.com/formrausch/frio_rpi4
     defp prepare_hardware do
+      if System.find_executable("udevd") do
+        System.cmd("udevd", ["--daemon"])
+        System.cmd("udevadm", ["trigger"])
+        System.cmd("udevadm", ["settle"])
+      end
+
       if System.find_executable("modprobe") do
         System.cmd("modprobe", ["-r", "vc4"])
         Process.sleep(500)
         System.cmd("modprobe", ["vc4"])
         Process.sleep(1000)
       end
+
+      :os.cmd(~c"dmesg -n 1")
     end
 
     defp target_children do
