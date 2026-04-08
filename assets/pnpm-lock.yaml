@@ -23,8 +23,8 @@ importers:
 
 packages:
 
-  morphdom@2.7.7:
-    resolution: {integrity: sha512-04GmsiBcalrSCNmzfo+UjU8tt3PhZJKzcOy+r1FlGA7/zri8wre3I1WkYN9PT3sIeIKfW9bpyElA+VzOg2E24g==}
+  morphdom@2.7.8:
+    resolution: {integrity: sha512-D/fR4xgGUyVRbdMGU6Nejea1RFzYxYtyurG4Fbv2Fi/daKlWKuXGLOdXtl+3eIwL110cI2hz1ZojGICjjFLgTg==}
 
   phoenix@file:../deps/phoenix:
     resolution: {directory: ../deps/phoenix, type: directory}
@@ -40,7 +40,7 @@ packages:
 
 snapshots:
 
-  morphdom@2.7.7: {}
+  morphdom@2.7.8: {}
 
   phoenix@file:../deps/phoenix: {}
 
@@ -48,6 +48,6 @@ snapshots:
 
   phoenix_live_view@file:../deps/phoenix_live_view:
     dependencies:
-      morphdom: 2.7.7
+      morphdom: 2.7.8
 
   three@0.170.0: {}

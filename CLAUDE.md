@@ -8,6 +8,20 @@ Raspberry Pi CM4 (64-bit).
 
 Run the tests with `mix test`. Tests run on the `:host` target by default.
 
+## Firmware deployment
+
+Build firmware with `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix firmware`.
+
+For OTA updates to a running device: `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix upload nerves.local`. This uses the A/B partition swap --- no
+physical access needed.
+
+For a full flash (e.g. after switching Nerves systems), you must use `rpiboot`
+to expose the eMMC and then `mix firmware.burn --device /dev/sdX`. Never mix
+partition layouts --- if you switch between Nerves systems with different
+`fwup.conf` layouts (e.g. `kiosk_system_rpi4` tryboot vs `frio_rpi4` MBR-swap),
+you must do a full `firmware.burn` to lay down the correct partition table. OTA
+uploads after a system switch will silently write to the wrong slot.
+
 ## Digital twin
 
 Although this project is primarily designed to run on real hardware, there's a
