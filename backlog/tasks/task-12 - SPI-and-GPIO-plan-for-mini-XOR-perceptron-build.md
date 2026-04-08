@@ -94,8 +94,8 @@ SPI1 CE2 (GPIO 16) is spare.
 ### References
 
 - Current SPI code: `lib/neon_perceptron/display.ex` (uses `spidev0.0` with 3× TLC5947 daisy-chained)
-- Node board schematic: `V2.0 Output assignments.pdf`
-- Power distribution schematic: `Power Distribution V1.2.pdf`
+- Node board schematic: `v2.0-output-assignments.pdf`
+- Power distribution schematic: `power-distribution-v1.2.pdf`
 - reTerminal DM datasheet: https://files.seeedstudio.com/wiki/reTerminalDM/reTerminalDM_datasheet.pdf
 - reTerminal DM hardware guide: https://wiki.seeedstudio.com/reterminal-dm-hardware-guide/
 - Device tree overlay source: https://github.com/Seeed-Studio/seeed-linux-dtoverlays
