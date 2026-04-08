@@ -8,16 +8,18 @@ defmodule NeonPerceptronWeb.KioskLive do
   end
 
   @impl true
-  def handle_info({:touch, :down, {x, y}}, socket) do
+  def handle_info({:touch, type, {x, y}}, socket) do
     socket =
       socket
-      |> assign(touch_count: socket.assigns.touch_count + 1, last_x: x, last_y: y)
-      |> push_event("server-touch", %{x: x, y: y})
+      |> then(fn s ->
+        if type == :down,
+          do: assign(s, touch_count: s.assigns.touch_count + 1, last_x: x, last_y: y),
+          else: assign(s, last_x: x, last_y: y)
+      end)
+      |> push_event("server-touch", %{type: type, x: x, y: y})
 
     {:noreply, socket}
   end
-
-  def handle_info({:touch, _, _}, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do
@@ -35,11 +37,31 @@ defmodule NeonPerceptronWeb.KioskLive do
       </div>
     </div>
     <script :type={Phoenix.LiveView.ColocatedHook} name=".TouchPulse" runtime>
+      const TOUCH_TYPE_TO_POINTER = {down: "pointerdown", move: "pointermove", up: "pointerup"};
+
       export default {
         mounted() {
-          this.handleEvent("server-touch", ({x, y}) => {
-            this.spawnCircle(x, y);
+          this.handleEvent("server-touch", ({type, x, y}) => {
+            this.dispatchSyntheticPointer(type, x, y);
+            if (type === "down") this.spawnCircle(x, y);
           });
+        },
+
+        dispatchSyntheticPointer(type, x, y) {
+          const target = document.elementFromPoint(x, y) || document.body;
+          const pointerType = TOUCH_TYPE_TO_POINTER[type];
+          if (!pointerType) return;
+
+          target.dispatchEvent(new PointerEvent(pointerType, {
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+            pointerId: 1,
+            pointerType: "touch",
+            isPrimary: true,
+            pressure: type === "up" ? 0 : 0.5,
+          }));
         },
 
         spawnCircle(x, y) {
