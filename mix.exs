@@ -78,7 +78,7 @@ defmodule NeonPerceptron.MixProject do
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
       # version updates, please review their release notes in case
       # changes to your application are needed.
-      {:frio_rpi4, "~> 2.0", github: "ANUcybernetics/frio_rpi4", branch: "main", runtime: false, targets: :rpi4}
+      {:reterminal_dm, "~> 2.0", github: "ANUcybernetics/reterminal_dm", tag: "v2.0.0", runtime: false, targets: :rpi4}
     ]
   end
 
