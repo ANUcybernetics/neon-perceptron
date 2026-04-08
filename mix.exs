@@ -38,6 +38,8 @@ defmodule NeonPerceptron.MixProject do
       {:toolshed, "~> 0.4.2"},
       {:req, "~> 0.5"},
 
+      {:input_event, "~> 1.4"},
+
       # might not need all of these, can thin out later
       {:circuits_uart, "~> 1.5"},
       {:circuits_gpio, "~> 2.1"},

@@ -19,7 +19,8 @@ defmodule NeonPerceptron.Application do
   defp common_children do
     [
       NeonPerceptron.Knob,
-      NeonPerceptron.Display
+      NeonPerceptron.Display,
+      NeonPerceptron.Touch
     ]
   end
 
