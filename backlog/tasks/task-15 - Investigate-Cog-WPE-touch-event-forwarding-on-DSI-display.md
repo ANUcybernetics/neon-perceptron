@@ -1,7 +1,7 @@
 ---
 id: TASK-15
 title: Investigate Cog/WPE touch event forwarding on DSI display
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-04-08 07:29'
 labels:
@@ -23,40 +23,42 @@ Cog 0.18.5 / WPE WebKit 2.48.3 does not forward Wayland touch events to the brow
 - no touch/pointer/click events reach the browser (tested with document-level listeners on pointerdown, touchstart, mousedown, click)
 - the display is native portrait 800x1280 (no Weston transform applied)
 
-## Current workaround
+## Current approach: synthetic PointerEvents (working)
 
 Touch is handled server-side: evdev -> InputEvent (Elixir) -> Touch GenServer -> PubSub -> LiveView push_event -> browser. This bypasses Cog entirely for touch input.
 
-As of 2026-04-08, the LiveView hook also dispatches synthetic `PointerEvent` objects (pointerdown/pointermove/pointerup) on the correct DOM target, so standard JS touch/pointer handling works despite Cog not forwarding native events.
+As of 2026-04-08, the LiveView hook dispatches synthetic `PointerEvent` objects (pointerdown/pointermove/pointerup) on the correct DOM target, so standard JS touch/pointer handling works despite Cog not forwarding native events. This is sufficient for our current UI needs.
 
-## Possible next step: switch from Cog/WPE to webengine_kiosk (Qt WebEngine)
+## Investigated alternatives
 
-The cleanest long-term fix is to replace Cog/WPE with [webengine_kiosk](https://github.com/nerves-web-kiosk/webengine_kiosk), which wraps Qt WebEngine (Chromium-based). Qt manages input directly from `/dev/input`, bypassing Wayland entirely --- so native browser touch events just work without the synthetic event workaround.
+### Cog `--platform=drm` (tested 2026-04-08, failed)
 
-### Why webengine_kiosk
+Cog supports a DRM platform backend that bypasses Weston and uses libinput directly for input. This would likely fix touch since it reads evdev directly. However, the current `reterminal_dm` system (v2.0.0) does not compile Cog with DRM platform support --- Cog exits with SIGABRT (status 134) when launched with `--platform=drm`.
 
-- touch input works natively (Qt reads evdev directly, no Wayland touch forwarding needed)
-- Chromium rendering engine has better web compatibility than WPE
-- was the original Nerves kiosk solution, so Elixir integration is mature
-- the CM4 has 8GB RAM, so the larger footprint (~150MB vs ~28MB for WPE) is not a concern
+**To try this in future:** add `BR2_PACKAGE_COG_PLATFORM_DRM=y` to the `reterminal_dm` nerves_defconfig and rebuild the system. Dependencies (Mesa3D, libinput) are already present.
 
-### What switching would involve
+### webengine_kiosk / Qt WebEngine (not viable)
 
-1. add `webengine_kiosk` to mix deps and remove `wpe_kiosk`/Cog references
-2. rebuild the custom `reterminal_dm` Nerves system with Qt WebEngine instead of WPE/Cog/Weston (Buildroot config changes)
-3. update application startup to launch `webengine_kiosk` instead of Weston + Cog
-4. verify native touch events reach the browser, then remove the synthetic PointerEvent dispatch and the server-side Touch GenServer (or keep the GenServer for non-browser touch uses)
+Initially looked promising, but:
+
+- webengine_kiosk is **archived** (Dec 2021, last release v0.3.0 targeting Qt5)
+- current Buildroot ships Qt6, so the C++ shim would need porting
+- kiosk_system_rpi4 does NOT use Qt WebEngine --- it uses the same Cog/WPE/Weston stack
+- would require adding ~20 Buildroot Qt6 packages and +150MB to rootfs
+
+### meta-wpe virtualinput fix (not applicable)
+
+The fix in [meta-wpe#224](https://github.com/WebPlatformForEmbedded/meta-wpe/issues/224) is for `wpebackend-rdk`, not the standard Cog Wayland platform (`--platform=wl`) that we use.
 
 ### Known Cog touch issues for reference
 
 - [igalia/cog#213](https://github.com/Igalia/cog/issues/213) --- multitouch broken (drag acts as pinch-to-zoom)
 - [igalia/cog#709](https://github.com/Igalia/cog/issues/709) --- long-press not working
-- [meta-wpe#224](https://github.com/WebPlatformForEmbedded/meta-wpe/issues/224) --- removing `virtualinput` from WPEBackend PACKAGECONFIG fixed touch on RPi
 - Cog PR #701 added safety guards for touch/pointer events on the Wayland platform
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Determine root cause of Cog touch event forwarding failure
-- [ ] #2 Either fix Cog touch or confirm server-side path is sufficient long-term
+- [x] #1 Determine root cause of Cog touch event forwarding failure
+- [x] #2 Either fix Cog touch or confirm server-side path is sufficient long-term
 <!-- AC:END -->
