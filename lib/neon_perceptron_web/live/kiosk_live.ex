@@ -4,20 +4,12 @@ defmodule NeonPerceptronWeb.KioskLive do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")
-    {:ok, assign(socket, touch_count: 0, bg_colour: "#000", last_touch: {0, 0})}
+    {:ok, socket}
   end
 
   @impl true
   def handle_info({:touch, :down, {x, y}}, socket) do
-    count = socket.assigns.touch_count + 1
-    hue = rem(count * 47, 360)
-
-    socket =
-      socket
-      |> assign(touch_count: count, bg_colour: "hsl(#{hue}, 80%, 40%)", last_touch: {x, y})
-      |> push_event("server-touch", %{x: x, y: y, count: count})
-
-    {:noreply, socket}
+    {:noreply, push_event(socket, "server-touch", %{x: x, y: y})}
   end
 
   def handle_info({:touch, _, _}, socket), do: {:noreply, socket}
@@ -28,12 +20,12 @@ defmodule NeonPerceptronWeb.KioskLive do
     <div
       id="touch-canvas"
       phx-hook=".TouchPulse"
-      style={"position: relative; width: 100vw; height: 100vh; background: #{@bg_colour}; overflow: hidden; touch-action: none;"}
+      style="position: relative; width: 100vw; height: 100vh; background: #000; overflow: hidden; touch-action: none;"
     >
       <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #0f0; font-family: monospace; font-size: 2rem; pointer-events: none;">
         <div style="text-align: center;">
           <h1 style="font-size: 3rem; margin-bottom: 1rem;">Neon Perceptron</h1>
-          <p>Touch anywhere (count: {@touch_count})</p>
+          <p>Touch anywhere</p>
         </div>
       </div>
     </div>
