@@ -17,7 +17,8 @@ defmodule NeonPerceptron.Kiosk.WestonServer do
         {:ok, %{mode: :simulation, pid: nil}}
 
       _path ->
-        args = ["--shell=kiosk", "--continue-without-input"]
+        Process.sleep(500)
+        args = ["--shell=kiosk", "--log=/tmp/weston.log"]
         env = [{"XDG_RUNTIME_DIR", @xdg_runtime_dir}]
 
         Logger.info("Starting Weston compositor")

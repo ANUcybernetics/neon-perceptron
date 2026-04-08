@@ -8,6 +8,7 @@ defmodule NeonPerceptron.Application do
   @impl true
   def start(_type, _args) do
     prepare_hardware()
+    Nerves.Runtime.validate_firmware()
     children = common_children() ++ target_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
@@ -60,6 +61,11 @@ defmodule NeonPerceptron.Application do
       end
 
       :os.cmd(~c"dmesg -n 1")
+
+      if System.find_executable("udevadm") do
+        System.cmd("udevadm", ["trigger"])
+        System.cmd("udevadm", ["settle"])
+      end
     end
 
     defp target_children do

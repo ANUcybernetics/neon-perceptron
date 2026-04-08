@@ -20,6 +20,8 @@ defmodule NeonPerceptron.Touch do
       callback: callback
     }
 
+    Process.flag(:trap_exit, true)
+
     case find_and_open_device() do
       {:ok, device_path} ->
         Logger.info("Touch device opened: #{device_path}")
@@ -36,6 +38,7 @@ defmodule NeonPerceptron.Touch do
     {:noreply, process_events(events, state)}
   end
 
+  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
   def handle_info(_msg, state), do: {:noreply, state}
 
   defp process_events([], state), do: state
@@ -72,18 +75,36 @@ defmodule NeonPerceptron.Touch do
     send(callback, {:touch, type, {x, y}})
   end
 
+  defp safe_enumerate do
+    InputEvent.enumerate()
+  rescue
+    _ -> []
+  catch
+    :exit, _ -> []
+  end
+
   defp find_and_open_device do
-    case InputEvent.enumerate() do
+    case safe_enumerate() do
       devices when is_list(devices) ->
         devices
         |> Enum.find(fn {_path, info} ->
-          String.contains?(String.downcase(info.name), "greentouch")
+          name = String.downcase(info.name)
+          String.contains?(name, "greentouch") or String.contains?(name, "goodix") or
+            String.contains?(name, "touchscreen")
         end)
         |> case do
           {path, _info} ->
-            case InputEvent.start_link(path: path, receiver: self()) do
-              {:ok, _pid} -> {:ok, path}
-              _ -> :error
+            case File.open(path, [:read]) do
+              {:ok, fd} ->
+                File.close(fd)
+
+                case InputEvent.start_link(path: path, receiver: self()) do
+                  {:ok, _pid} -> {:ok, path}
+                  _ -> :error
+                end
+
+              {:error, _} ->
+                :error
             end
 
           nil ->
