@@ -4,12 +4,17 @@ defmodule NeonPerceptronWeb.KioskLive do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")
-    {:ok, socket}
+    {:ok, assign(socket, touch_count: 0, last_x: 0, last_y: 0)}
   end
 
   @impl true
   def handle_info({:touch, :down, {x, y}}, socket) do
-    {:noreply, push_event(socket, "server-touch", %{x: x, y: y})}
+    socket =
+      socket
+      |> assign(touch_count: socket.assigns.touch_count + 1, last_x: x, last_y: y)
+      |> push_event("server-touch", %{x: x, y: y})
+
+    {:noreply, socket}
   end
 
   def handle_info({:touch, _, _}, socket), do: {:noreply, socket}
@@ -25,7 +30,7 @@ defmodule NeonPerceptronWeb.KioskLive do
       <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #0f0; font-family: monospace; font-size: 2rem; pointer-events: none;">
         <div style="text-align: center;">
           <h1 style="font-size: 3rem; margin-bottom: 1rem;">Neon Perceptron</h1>
-          <p>Touch anywhere</p>
+          <p>Touch anywhere (count: {@touch_count}, x: {@last_x}, y: {@last_y})</p>
         </div>
       </div>
     </div>
