@@ -5,10 +5,10 @@ defmodule NeonPerceptronTest.KioskLiveTest do
 
   @endpoint NeonPerceptronWeb.Endpoint
 
-  test "kiosk page renders touch UI" do
+  test "kiosk page mounts and renders touch canvas" do
     conn = build_conn()
     {:ok, _view, html} = live(conn, "/ui")
-    assert html =~ "Neon Perceptron"
-    assert html =~ "Touch anywhere"
+    assert html =~ ~s(id="touch-canvas")
+    assert html =~ "TouchPulse"
   end
 end

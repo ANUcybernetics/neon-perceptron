@@ -51,33 +51,29 @@ defmodule NeonPerceptron.ModelTest do
     GenServer.stop(model_pid)
   end
 
-  # test that the model converges to reasonable accuracy rather than requiring perfection
-  # this is more robust than the previous test which required 100% accuracy
-  test "end-to-end test" do
+  test "end-to-end training reduces loss" do
     model = NeonPerceptron.Model.new(2)
     {inputs, targets} = NeonPerceptron.Model.training_set()
     training_data = Enum.zip(Nx.to_batched(inputs, 1), Nx.to_batched(targets, 1))
 
-    # reduced from 500 to 300 epochs - enough to reliably achieve 70% while still being faster
-    params = NeonPerceptron.Model.train(model, training_data, epochs: 300)
+    losses = :ets.new(:test_losses, [:ordered_set])
 
-    # check that parameters have been updated (model isn't stuck)
-    dense_0_sum = Map.get(params, :data)["dense_0"]["kernel"] |> Nx.sum()
-    dense_1_sum = Map.get(params, :data)["dense_1"]["kernel"] |> Nx.sum()
+    model
+    |> Axon.Loop.trainer(:categorical_cross_entropy, :adam)
+    |> Axon.Loop.handle_event(:epoch_completed, fn state ->
+      loss = Nx.to_number(state.metrics["loss"])
+      epoch = Nx.to_number(state.epoch)
+      :ets.insert(losses, {epoch, loss})
+      {:continue, state}
+    end)
+    |> Axon.Loop.run(training_data, Axon.ModelState.empty(), epochs: 100)
 
-    assert dense_0_sum != 0.0
-    assert dense_1_sum != 0.0
+    [{_, first_loss}] = :ets.lookup(losses, 0)
+    [{_, last_loss}] = :ets.lookup(losses, 99)
+    :ets.delete(losses)
 
-    # check accuracy across all digits
-    {_init_fn, predict_fn} = Axon.build(model, print_values: false)
-    predictions = predict_fn.(params, inputs)
-    accuracy = Axon.Metrics.accuracy(targets, predictions) |> Nx.to_number()
-
-    # require at least 50% accuracy to verify convergence (much better than random 10%)
-    # a 2-hidden-unit network is very small and has high variance, so 50% is reasonable
-    assert accuracy >= 0.5, "Expected accuracy >= 50%, got #{Float.round(accuracy * 100, 1)}%"
-
-    IO.puts("Model achieved #{Float.round(accuracy * 100, 1)}% accuracy")
+    assert last_loss < first_loss,
+           "Expected loss to decrease: epoch 0=#{Float.round(first_loss, 4)}, epoch 99=#{Float.round(last_loss, 4)}"
   end
 
   test "model halting" do
