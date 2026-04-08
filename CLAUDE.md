@@ -47,6 +47,21 @@ will fail to detect the active slot, causing OTA updates to never validate and
 always fall back to the previous slot. This requires a full system rebuild since
 `fwup-ops.conf` is compiled into `ops.fw` and baked into the system image.
 
+## Touch input
+
+Touch input on the reTerminal DM is handled server-side, not through the
+browser's native touch events. Cog/WPE does not forward Wayland touch events to
+the browser (see TASK-15), so the pipeline is:
+
+1. Goodix touchscreen → `/dev/input/event0` (kernel evdev)
+2. `InputEvent` library (Elixir, poll-based) → `NeonPerceptron.Touch` GenServer
+3. PubSub broadcast on the `"touch"` topic with `{:touch, :down | :move | :up, {x, y}}`
+4. LiveView subscribes and uses `push_event` or assigns to update the browser
+
+This means all touch-driven UI must go through LiveView server events, not
+client-side JS event listeners. Use `Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")`
+in `mount/3` and handle `{:touch, type, {x, y}}` messages in `handle_info/2`.
+
 ## Digital twin
 
 Although this project is primarily designed to run on real hardware, there's a
