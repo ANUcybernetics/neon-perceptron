@@ -12,15 +12,40 @@ Run the tests with `mix test`. Tests run on the `:host` target by default.
 
 Build firmware with `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix firmware`.
 
-For OTA updates to a running device: `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix upload nerves.local`. This uses the A/B partition swap --- no
-physical access needed.
+For OTA updates to a running device: `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix upload nerves.local`. This uses the RPi4 tryboot A/B scheme
+with automatic rollback --- no physical access needed.
 
-For a full flash (e.g. after switching Nerves systems), you must use `rpiboot`
-to expose the eMMC and then `mix firmware.burn --device /dev/sdX`. Never mix
-partition layouts --- if you switch between Nerves systems with different
-`fwup.conf` layouts (e.g. `kiosk_system_rpi4` tryboot vs `frio_rpi4` MBR-swap),
-you must do a full `firmware.burn` to lay down the correct partition table. OTA
-uploads after a system switch will silently write to the wrong slot.
+For a full flash (e.g. after switching Nerves systems or partition layouts), use
+`rpiboot` to expose the eMMC and then `mix firmware.burn --device /dev/sdX`.
+
+## Custom Nerves system (reterminal_dm)
+
+The project uses a custom Nerves system at
+`github.com/ANUcybernetics/reterminal_dm` (forked from `formrausch/frio_rpi4`).
+This provides full hardware support for the reTerminal DM's DSI display
+(ILI9881D panel driver), Goodix touchscreen, GPIO expander, CAN bus, audio, and
+RTC.
+
+### Building the system
+
+The system is built with Buildroot via `nerves_system_br`. Building requires
+Podman (or Docker):
+
+```
+cd /path/to/reterminal_dm
+NERVES_BR_DOCKER=podman mise exec -- mix compile
+```
+
+First build takes ~20 min with 48 cores (`BR2_JLEVEL=0`). Prebuilt artifacts
+are published as GitHub releases --- only rebuild if you change the system
+itself (defconfig, fwup.conf, fwup-ops.conf, kernel config, custom packages).
+
+**Important:** `fwup-ops.conf` must stay in sync with `fwup.conf`. If you change
+the partition layout or A/B scheme in `fwup.conf`, you must update
+`fwup-ops.conf` to match. If they diverge, `Nerves.Runtime.validate_firmware()`
+will fail to detect the active slot, causing OTA updates to never validate and
+always fall back to the previous slot. This requires a full system rebuild since
+`fwup-ops.conf` is compiled into `ops.fw` and baked into the system image.
 
 ## Digital twin
 
