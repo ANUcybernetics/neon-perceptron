@@ -9,16 +9,18 @@ defmodule NeonPerceptron.MixProject do
     [
       app: @app,
       version: @version,
-      elixir: "~> 1.17",
+      elixir: "~> 1.19",
       archives: [nerves_bootstrap: "~> 1.14"],
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      releases: [{@app, release()}],
-      preferred_cli_target: [run: :host, test: :host]
+      releases: [{@app, release()}]
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
+  def cli do
+    [preferred_targets: [run: :host, test: :host]]
+  end
+
   def application do
     [
       extra_applications: [:logger, :runtime_tools],
@@ -44,8 +46,6 @@ defmodule NeonPerceptron.MixProject do
 
       # AI stuff
       {:axon, "~> 0.7"},
-      {:exla, "~> 0.10.0", targets: :host},
-      # {:nx_eigen, "~> 0.1.1"},
       {:emlx, github: "elixir-nx/emlx", branch: "main", targets: :host},
       {:scidata, "~> 0.1", only: :test},
       {:nx_image, "~> 0.1.0", only: :test},
@@ -64,7 +64,7 @@ defmodule NeonPerceptron.MixProject do
 
       # Development tools
       {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},
-      {:usage_rules, "~> 0.1", only: [:dev, :test], runtime: false},
+      {:usage_rules, "~> 1.2", only: [:dev, :test], runtime: false},
 
       # Allow Nerves.Runtime on host to support development, testing and CI.
       # See config/host.exs for usage.
@@ -78,7 +78,7 @@ defmodule NeonPerceptron.MixProject do
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
       # version updates, please review their release notes in case
       # changes to your application are needed.
-      {:frio_rpi4, "~> 1.30", github: "formrausch/frio_rpi4", tag: "v1.30.0", runtime: false, targets: :rpi4}
+      {:frio_rpi4, "~> 2.0", github: "ANUcybernetics/frio_rpi4", branch: "main", runtime: false, targets: :rpi4}
     ]
   end
 

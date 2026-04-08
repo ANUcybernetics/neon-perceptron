@@ -5,10 +5,10 @@ defmodule NeonPerceptronTest.KioskLiveTest do
 
   @endpoint NeonPerceptronWeb.Endpoint
 
-  test "kiosk page renders placeholder" do
+  test "kiosk page renders touch UI" do
     conn = build_conn()
     {:ok, _view, html} = live(conn, "/ui")
     assert html =~ "Neon Perceptron"
-    assert html =~ "Kiosk UI placeholder"
+    assert html =~ "Touch anywhere"
   end
 end

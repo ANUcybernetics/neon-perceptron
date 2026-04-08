@@ -4,7 +4,7 @@ title: Fork frio_rpi4 and update to OTP 28
 status: To Do
 assignee: []
 created_date: '2026-04-07 07:31'
-updated_date: '2026-04-08 01:32'
+updated_date: '2026-04-08 02:00'
 labels: []
 dependencies:
   - TASK-13
@@ -54,12 +54,12 @@ We switched to frio_rpi4 from kiosk_system_rpi4 because the reTerminal DM's DSI 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 frio_rpi4 forked to ANUcybernetics GitHub org
-- [ ] #2 nerves_system_br updated to ~1.33 and toolchain to latest
+- [x] #1 frio_rpi4 forked to ANUcybernetics GitHub org
+- [x] #2 nerves_system_br updated to ~1.33 and toolchain to latest
 - [ ] #3 System builds successfully with OTP 28
 - [ ] #4 DSI display and touchscreen work on reTerminal DM
 - [ ] #5 GitHub release published with prebuilt artifacts
-- [ ] #6 neon-perceptron updated to use forked system with OTP 28
+- [x] #6 neon-perceptron updated to use forked system with OTP 28
 - [ ] #7 OTA firmware updates via mix upload work correctly
 - [ ] #8 udevd starts before Weston (touchscreen works on boot)
 <!-- AC:END -->
