@@ -3,12 +3,12 @@ defmodule NeonPerceptronWeb.KioskLive do
 
   alias NeonPerceptron.Trainer
 
-  @input_step 0.1
+  @tap_step 0.1
+  @draw_step 0.015
 
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")
       Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "network_state")
     end
 
@@ -25,13 +25,6 @@ defmodule NeonPerceptronWeb.KioskLive do
   end
 
   @impl true
-  def handle_info({:touch, :down, {x, y}}, socket) do
-    socket = push_event(socket, "server-touch", %{type: "down", x: x, y: y})
-    {:noreply, socket}
-  end
-
-  def handle_info({:touch, _type, _pos}, socket), do: {:noreply, socket}
-
   def handle_info({:network_state, state}, socket) do
     outputs = Map.get(state.activations, "output", [0.0, 0.0])
 
@@ -46,9 +39,17 @@ defmodule NeonPerceptronWeb.KioskLive do
   def handle_info(_msg, socket), do: {:noreply, socket}
 
   @impl true
+  def handle_event("draw_input", %{"index" => index_str, "type" => type}, socket) do
+    index = String.to_integer(index_str)
+    step = if type == "down", do: @tap_step, else: @draw_step
+    inputs = List.update_at(socket.assigns.inputs, index, &min(&1 + step, 1.0))
+    push_input(inputs)
+    {:noreply, assign(socket, inputs: inputs)}
+  end
+
   def handle_event("tap_input", %{"index" => index_str}, socket) do
     index = String.to_integer(index_str)
-    inputs = List.update_at(socket.assigns.inputs, index, &min(&1 + @input_step, 1.0))
+    inputs = List.update_at(socket.assigns.inputs, index, &min(&1 + @tap_step, 1.0))
     push_input(inputs)
     {:noreply, assign(socket, inputs: inputs)}
   end
@@ -85,13 +86,14 @@ defmodule NeonPerceptronWeb.KioskLive do
     ~H"""
     <div
       id="kiosk"
-      phx-hook=".TouchClick"
+      phx-hook=".InputDraw"
       style="display: flex; flex-direction: column; width: 100vw; height: 100vh; background: #000; color: #eee; font-family: 'IBM Plex Mono', monospace; user-select: none; touch-action: none;"
     >
       <%!-- Input grid (top portion) --%>
       <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1.5rem; padding: 2rem;">
         <button
           :for={{value, index} <- Enum.with_index(@inputs)}
+          data-input-index={index}
           phx-click="tap_input"
           phx-value-index={index}
           style={"
@@ -150,18 +152,41 @@ defmodule NeonPerceptronWeb.KioskLive do
       </div>
     </div>
 
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".TouchClick">
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".InputDraw">
       export default {
         mounted() {
-          this.handleEvent("server-touch", ({type, x, y}) => {
-            if (type !== "down") return;
-            const target = document.elementFromPoint(x, y);
-            if (target) {
-              target.dispatchEvent(new MouseEvent("click", {
-                bubbles: true, cancelable: true,
-                clientX: x, clientY: y,
-              }));
+          this.drawing = false;
+
+          this.el.addEventListener("pointerdown", (e) => {
+            const cell = e.target.closest("[data-input-index]");
+            if (!cell) return;
+            e.preventDefault();
+            this.drawing = true;
+            cell.setPointerCapture(e.pointerId);
+            this.pushEvent("draw_input", {
+              index: cell.dataset.inputIndex,
+              type: "down",
+            });
+          });
+
+          this.el.addEventListener("pointermove", (e) => {
+            if (!this.drawing) return;
+            const cell = document.elementFromPoint(e.clientX, e.clientY);
+            const input = cell && cell.closest("[data-input-index]");
+            if (input) {
+              this.pushEvent("draw_input", {
+                index: input.dataset.inputIndex,
+                type: "move",
+              });
             }
+          });
+
+          this.el.addEventListener("pointerup", () => {
+            this.drawing = false;
+          });
+
+          this.el.addEventListener("pointercancel", () => {
+            this.drawing = false;
           });
         },
       };
@@ -170,7 +195,6 @@ defmodule NeonPerceptronWeb.KioskLive do
   end
 
   defp input_cell_colour(value) do
-    # Dark to bright teal as value increases
     r = round(value * 30)
     g = round(value * 200 + 20)
     b = round(value * 180 + 20)

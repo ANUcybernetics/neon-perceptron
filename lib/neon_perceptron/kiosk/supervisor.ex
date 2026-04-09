@@ -7,10 +7,12 @@ defmodule NeonPerceptron.Kiosk.Supervisor do
 
   @impl true
   def init(_opts) do
-    children = seatd_child() ++ [
-      NeonPerceptron.Kiosk.WestonServer,
-      NeonPerceptron.Kiosk.CogServer
-    ]
+    platform = Application.get_env(:neon_perceptron, :kiosk_platform, :wl)
+
+    children =
+      seatd_child() ++
+        weston_child(platform) ++
+        [NeonPerceptron.Kiosk.CogServer]
 
     Supervisor.init(children, strategy: :rest_for_one)
   end
@@ -27,5 +29,13 @@ defmodule NeonPerceptron.Kiosk.Supervisor do
     else
       []
     end
+  end
+
+  defp weston_child(:wl) do
+    [NeonPerceptron.Kiosk.WestonServer]
+  end
+
+  defp weston_child(:drm) do
+    []
   end
 end
