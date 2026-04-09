@@ -12,7 +12,9 @@ config :logger, backends: [RingLogger]
 # Hardware configuration for target environment (Nerves devices)
 # When running on target, hardware should be available and required
 config :neon_perceptron, hardware_required: true
-config :neon_perceptron, kiosk_platform: :drm
+# :drm blocked by Cog framebuffer creation bug with ILI9881D DSI panel
+# (Igalia/cog#748). Using :wl with server-side touch workaround for now.
+config :neon_perceptron, kiosk_platform: :wl
 # config :neon_perceptron, build: NeonPerceptron.Builds.TestPattern
 config :neon_perceptron, build: NeonPerceptron.Builds.V2
 

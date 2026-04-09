@@ -9,6 +9,7 @@ defmodule NeonPerceptronWeb.KioskLive do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
+      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")
       Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "network_state")
     end
 
@@ -25,6 +26,13 @@ defmodule NeonPerceptronWeb.KioskLive do
   end
 
   @impl true
+  def handle_info({:touch, type, {x, y}}, socket) when type in [:down, :move] do
+    socket = push_event(socket, "server-touch", %{type: to_string(type), x: x, y: y})
+    {:noreply, socket}
+  end
+
+  def handle_info({:touch, _type, _pos}, socket), do: {:noreply, socket}
+
   def handle_info({:network_state, state}, socket) do
     outputs = Map.get(state.activations, "output", [0.0, 0.0])
 
@@ -157,6 +165,7 @@ defmodule NeonPerceptronWeb.KioskLive do
         mounted() {
           this.drawing = false;
 
+          // Native pointer events (works if Cog DRM or browser forwards touch)
           this.el.addEventListener("pointerdown", (e) => {
             const cell = e.target.closest("[data-input-index]");
             if (!cell) return;
@@ -187,6 +196,28 @@ defmodule NeonPerceptronWeb.KioskLive do
 
           this.el.addEventListener("pointercancel", () => {
             this.drawing = false;
+          });
+
+          // Server-side touch synthesis (Wayland path: Cog doesn't forward touch)
+          this.handleEvent("server-touch", ({type, x, y}) => {
+            const target = document.elementFromPoint(x, y);
+            if (!target) return;
+
+            const cell = target.closest("[data-input-index]");
+            if (cell) {
+              this.pushEvent("draw_input", {
+                index: cell.dataset.inputIndex,
+                type: type,
+              });
+              return;
+            }
+
+            if (type === "down") {
+              target.dispatchEvent(new MouseEvent("click", {
+                bubbles: true, cancelable: true,
+                clientX: x, clientY: y,
+              }));
+            }
           });
         },
       };
