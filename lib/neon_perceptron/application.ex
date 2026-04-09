@@ -34,7 +34,10 @@ defmodule NeonPerceptron.Application do
   defp build_children(build, role) do
     trainer =
       if role == :trainer do
-        [{Trainer, build.trainer_config()}]
+        case build.trainer_config() do
+          nil -> []
+          config -> [{Trainer, config}]
+        end
       else
         []
       end
@@ -43,7 +46,12 @@ defmodule NeonPerceptron.Application do
       build.column_configs()
       |> Enum.map(fn config -> {Column, config} end)
 
-    trainer ++ columns
+    extra =
+      if function_exported?(build, :extra_children, 0),
+        do: build.extra_children(),
+        else: []
+
+    trainer ++ columns ++ extra
   end
 
   defp phoenix_children do

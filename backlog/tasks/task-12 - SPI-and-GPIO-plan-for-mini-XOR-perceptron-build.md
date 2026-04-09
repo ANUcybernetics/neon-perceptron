@@ -58,6 +58,18 @@ Central hub connecting the CM4 40-pin header to the node board columns:
 - Decoupling caps per output
 - 4-pin power input (CN1)
 
+PCB silk screen labels map to spidev paths as a flat index across both SPI
+buses (SPI2 is unused because SPI0 only has two chip selects):
+
+| Silk screen | Schematic ref | spidev    | Column       |
+| ----------- | ------------- | --------- | ------------ |
+| SPI0        | CN2           | spidev0.0 | Input left   |
+| SPI1        | CN3           | spidev0.1 | Input right  |
+| SPI2        | ---           | ---       | (unused)     |
+| SPI3        | CN4           | spidev1.0 | Hidden front |
+| SPI4        | CN5           | spidev1.1 | Hidden rear  |
+| SPI5        | CN6           | spidev1.2 | Output       |
+
 ### Device tree overlays to disable
 
 | Overlay                   | GPIOs freed                   | Reason                               |
