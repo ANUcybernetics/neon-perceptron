@@ -10,13 +10,15 @@ defmodule NeonPerceptron.NetworkState do
   defstruct activations: %{},
             weights: %{},
             topology: %{layers: [], sizes: %{}},
-            iteration: 0
+            iteration: 0,
+            loss: 0.0
 
   @type t :: %__MODULE__{
           activations: %{String.t() => [float()]},
           weights: %{String.t() => [float()]},
           topology: topology(),
-          iteration: non_neg_integer()
+          iteration: non_neg_integer(),
+          loss: float()
         }
 
   @type topology :: %{

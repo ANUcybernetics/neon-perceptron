@@ -11,7 +11,7 @@ defmodule NeonPerceptron.Builds.TestPattern do
   def trainer_config, do: nil
 
   def extra_children do
-    ids = [:input_left, :input_right, :hidden_front, :hidden_rear, :output]
+    ids = Enum.map(column_configs(), & &1.id)
     [{__MODULE__.Ticker, ids}]
   end
 

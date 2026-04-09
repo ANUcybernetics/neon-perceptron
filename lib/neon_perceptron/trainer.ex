@@ -139,7 +139,8 @@ defmodule NeonPerceptron.Trainer do
       activations: activations,
       weights: weights,
       topology: topology,
-      iteration: iteration
+      iteration: iteration,
+      loss: Nx.to_number(state.step_state.loss)
     }
   end
 

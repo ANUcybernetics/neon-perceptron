@@ -2,14 +2,14 @@ defmodule NeonPerceptron.Builds.V2 do
   @moduledoc """
   V2 build: mini XOR perceptron.
 
-  A 4→3→2 network demonstrating that a hidden layer with nonlinear activation
+  A 4->3->2 network demonstrating that a hidden layer with nonlinear activation
   can solve linearly inseparable problems (XOR). Physical layout: 12 TLC5947
   boards across 5 chip selects (SPI0 CE0/CE1 + SPI1 CE0/CE1/CE2) on a single
   reTerminal DM.
 
   The 2x2 input grid has two diagonal patterns:
-  - Left diagonal:  `[[1,0],[0,1]]` → output[0] = 1
-  - Right diagonal: `[[0,1],[1,0]]` → output[1] = 1
+  - Left diagonal:  `[[1,0],[0,1]]` -> output[0] = 1
+  - Right diagonal: `[[0,1],[1,0]]` -> output[1] = 1
 
   ## Physical layout
 
@@ -20,6 +20,37 @@ defmodule NeonPerceptron.Builds.V2 do
   | spidev1.0 | hidden_front | 3      | hidden_0[0], hidden_0[1], hidden_0[2] |
   | spidev1.1 | hidden_rear  | 3      | Same 3 hidden nodes (back-to-back) |
   | spidev1.2 | output       | 2      | output[0], output[1]             |
+
+  ## LED hardware per board (TLC5947, 24 channels)
+
+  ### Big LEDs (channels 18--23)
+
+  Each board has a front and rear "big LED" driven by three PWM channels each.
+  The physical LED type differs by layer:
+
+  - **Input layer boards**: monochrome LEDs --- all three RGB pads are wired to
+    the same LED element. Setting R=G=B=brightness is sufficient; the hue
+    doesn't matter. Brightness encodes the input activation (0.0--1.0).
+  - **Hidden and output layer boards**: proper RGB LEDs. Hue encodes the node's
+    activation value, at full saturation and value.
+
+  ### LED noodles (channels 0--17, 9 pairs)
+
+  Each board has 18 individual PWM outputs driving 9 pairs of LED "noodles"
+  (flexible LED wires). Each pair represents one incoming edge in the neural
+  network graph. The two noodles in a pair are different physical colours,
+  forming a diverging colour palette:
+
+  - **Channel 2*i** (even): "positive" noodle --- lit when the edge
+    contribution (weight * source activation) is positive.
+  - **Channel 2*i+1** (odd): "negative" noodle --- lit when the edge
+    contribution is negative.
+  - Brightness = magnitude of the contribution, clamped to [0, 1].
+
+  Pair-to-edge mapping:
+  - Hidden nodes (4 incoming edges from input): pairs 0--3 used, pairs 4--8 dark.
+  - Output nodes (3 incoming edges from hidden): pairs 0--2 used, pairs 3--8 dark.
+  - Input nodes (no incoming edges): all noodle pairs dark.
   """
 
   alias NeonPerceptron.{Board, NetworkState}
@@ -109,7 +140,10 @@ defmodule NeonPerceptron.Builds.V2 do
   end
 
   @doc """
-  Axon model: 4 inputs → 3 hidden (tanh) → 2 outputs (sigmoid).
+  Axon model: 4 inputs -> 3 hidden (tanh) -> 2 outputs (sigmoid).
+
+  No bias terms, which makes XOR slightly harder to learn and more
+  interesting to watch train.
   """
   def model do
     Axon.input("bits", shape: {nil, 4})
@@ -131,29 +165,17 @@ defmodule NeonPerceptron.Builds.V2 do
     inputs =
       Nx.tensor(
         [
-          # all off
           [0, 0, 0, 0],
-          # left diagonal
           [1, 0, 0, 1],
-          # right diagonal
           [0, 1, 1, 0],
-          # all on
           [1, 1, 1, 1],
-          # top-left only
           [1, 0, 0, 0],
-          # top-right only
           [0, 1, 0, 0],
-          # bottom-left only
           [0, 0, 1, 0],
-          # bottom-right only
           [0, 0, 0, 1],
-          # top row
           [1, 1, 0, 0],
-          # bottom row
           [0, 0, 1, 1],
-          # left column
           [1, 0, 1, 0],
-          # right column
           [0, 1, 0, 1]
         ],
         type: :f32
@@ -162,23 +184,16 @@ defmodule NeonPerceptron.Builds.V2 do
     targets =
       Nx.tensor(
         [
-          # all off → neither diagonal
           [0, 0],
-          # left diagonal → output[0]
           [1, 0],
-          # right diagonal → output[1]
           [0, 1],
-          # all on → both diagonals
           [1, 1],
-          # single corners → neither
           [0, 0],
           [0, 0],
           [0, 0],
           [0, 0],
-          # rows → neither
           [0, 0],
           [0, 0],
-          # columns → neither
           [0, 0],
           [0, 0]
         ],
@@ -191,33 +206,83 @@ defmodule NeonPerceptron.Builds.V2 do
   @doc """
   Render a single node board's 24 PWM channels.
 
-  Current strategy (simple, will evolve):
-  - Big LED front: node activation as white brightness
-  - Big LED rear: same as front
-  - Individual LEDs 0--17: incoming weight contributions (abs value)
+  Dispatches to layer-specific rendering: input nodes use monochrome big LEDs
+  with no noodles; hidden/output nodes use RGB big LEDs with noodle pairs
+  showing incoming edge contributions.
   """
+  def render_node(%NetworkState{} = state, %{layer: "input", node_index: index}) do
+    activation = NetworkState.activation_for_node(state, "input", index)
+
+    Board.blank()
+    |> List.replace_at(Board.front_blue(), activation)
+    |> List.replace_at(Board.front_green(), activation)
+    |> List.replace_at(Board.front_red(), activation)
+    |> List.replace_at(Board.rear_blue(), activation)
+    |> List.replace_at(Board.rear_green(), activation)
+    |> List.replace_at(Board.rear_red(), activation)
+  end
+
   def render_node(%NetworkState{} = state, %{layer: layer, node_index: index}) do
     activation = NetworkState.activation_for_node(state, layer, index)
-    brightness = abs(activation)
-
-    channels = Board.blank()
+    {r, g, b} = activation_to_rgb(activation, layer)
 
     channels =
-      channels
-      |> List.replace_at(Board.front_blue(), brightness)
-      |> List.replace_at(Board.front_green(), brightness)
-      |> List.replace_at(Board.front_red(), brightness)
-      |> List.replace_at(Board.rear_blue(), brightness)
-      |> List.replace_at(Board.rear_green(), brightness)
-      |> List.replace_at(Board.rear_red(), brightness)
+      Board.blank()
+      |> List.replace_at(Board.front_red(), r)
+      |> List.replace_at(Board.front_green(), g)
+      |> List.replace_at(Board.front_blue(), b)
+      |> List.replace_at(Board.rear_red(), r)
+      |> List.replace_at(Board.rear_green(), g)
+      |> List.replace_at(Board.rear_blue(), b)
 
     incoming = NetworkState.incoming_contributions(state, layer, index)
 
-    incoming
-    |> Enum.take(18)
-    |> Enum.with_index()
-    |> Enum.reduce(channels, fn {{_weight, _act, contribution}, ch_index}, acc ->
-      List.replace_at(acc, ch_index, abs(contribution))
+    Enum.with_index(incoming)
+    |> Enum.reduce(channels, fn {{_weight, _act, contribution}, pair_index}, acc ->
+      pos_ch = pair_index * 2
+      neg_ch = pair_index * 2 + 1
+
+      if contribution >= 0 do
+        acc
+        |> List.replace_at(pos_ch, min(contribution, 1.0))
+        |> List.replace_at(neg_ch, 0.0)
+      else
+        acc
+        |> List.replace_at(pos_ch, 0.0)
+        |> List.replace_at(neg_ch, min(abs(contribution), 1.0))
+      end
     end)
   end
+
+  defp activation_to_rgb(activation, "hidden_0") do
+    # tanh: [-1, 1] -> normalise to [0, 1] then map to hue
+    t = (activation + 1) / 2
+    hsv_to_rgb(t * 270, 1.0, 1.0)
+  end
+
+  defp activation_to_rgb(activation, "output") do
+    # sigmoid: [0, 1] -> map directly to hue
+    hsv_to_rgb(activation * 270, 1.0, 1.0)
+  end
+
+  defp hsv_to_rgb(h, s, v) do
+    c = v * s
+    h_prime = h / 60
+    x = c * (1 - abs(fmod(h_prime, 2) - 1))
+
+    {r1, g1, b1} =
+      case trunc(h_prime) do
+        0 -> {c, x, 0.0}
+        1 -> {x, c, 0.0}
+        2 -> {0.0, c, x}
+        3 -> {0.0, x, c}
+        4 -> {x, 0.0, c}
+        _ -> {c, 0.0, x}
+      end
+
+    m = v - c
+    {r1 + m, g1 + m, b1 + m}
+  end
+
+  defp fmod(a, b), do: a - Float.floor(a / b) * b
 end

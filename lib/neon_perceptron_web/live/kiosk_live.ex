@@ -1,95 +1,179 @@
 defmodule NeonPerceptronWeb.KioskLive do
   use NeonPerceptronWeb, :live_view
 
+  alias NeonPerceptron.Trainer
+
+  @input_step 0.1
+
   @impl true
   def mount(_params, _session, socket) do
-    if connected?(socket), do: Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")
-    {:ok, assign(socket, touch_count: 0, last_x: 0, last_y: 0)}
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")
+      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "network_state")
+    end
+
+    inputs = [0.0, 0.0, 0.0, 0.0]
+    push_input(inputs)
+
+    {:ok,
+     assign(socket,
+       inputs: inputs,
+       outputs: [0.0, 0.0],
+       iteration: 0,
+       loss: 0.0
+     )}
   end
 
   @impl true
-  def handle_info({:touch, type, {x, y}}, socket) do
-    socket =
-      socket
-      |> then(fn s ->
-        if type == :down,
-          do: assign(s, touch_count: s.assigns.touch_count + 1, last_x: x, last_y: y),
-          else: assign(s, last_x: x, last_y: y)
-      end)
-      |> push_event("server-touch", %{type: type, x: x, y: y})
-
+  def handle_info({:touch, :down, {x, y}}, socket) do
+    socket = push_event(socket, "server-touch", %{type: "down", x: x, y: y})
     {:noreply, socket}
   end
+
+  def handle_info({:touch, _type, _pos}, socket), do: {:noreply, socket}
+
+  def handle_info({:network_state, state}, socket) do
+    outputs = Map.get(state.activations, "output", [0.0, 0.0])
+
+    {:noreply,
+     assign(socket,
+       outputs: outputs,
+       iteration: state.iteration,
+       loss: state.loss
+     )}
+  end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("tap_input", %{"index" => index_str}, socket) do
+    index = String.to_integer(index_str)
+    inputs = List.update_at(socket.assigns.inputs, index, &min(&1 + @input_step, 1.0))
+    push_input(inputs)
+    {:noreply, assign(socket, inputs: inputs)}
+  end
+
+  def handle_event("reset_weights", _params, socket) do
+    Trainer.reset()
+    {:noreply, socket}
+  end
+
+  def handle_event("clear_inputs", _params, socket) do
+    inputs = [0.0, 0.0, 0.0, 0.0]
+    push_input(inputs)
+    {:noreply, assign(socket, inputs: inputs)}
+  end
+
+  defp push_input(inputs) do
+    if Process.whereis(NeonPerceptron.Trainer) do
+      Trainer.set_web_input(inputs)
+    end
+  end
+
+  defp brightness_pct(value), do: "#{round(value * 100)}%"
+
+  defp format_loss(loss) when is_float(loss), do: :erlang.float_to_binary(loss, decimals: 4)
+  defp format_loss(_), do: "---"
+
+  defp format_output(value) when is_float(value),
+    do: :erlang.float_to_binary(value, decimals: 3)
+
+  defp format_output(_), do: "---"
 
   @impl true
   def render(assigns) do
     ~H"""
     <div
-      id="touch-canvas"
-      phx-hook=".TouchPulse"
-      style="position: relative; width: 100vw; height: 100vh; background: #000; overflow: hidden; touch-action: none;"
+      id="kiosk"
+      phx-hook=".TouchClick"
+      style="display: flex; flex-direction: column; width: 100vw; height: 100vh; background: #000; color: #eee; font-family: 'IBM Plex Mono', monospace; user-select: none; touch-action: none;"
     >
-      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #0f0; font-family: monospace; font-size: 2rem; pointer-events: none;">
-        <div style="text-align: center;">
-          <h1 style="font-size: 3rem; margin-bottom: 1rem;">Neon Perceptron</h1>
-          <p>Touch anywhere (count: {@touch_count}, x: {@last_x}, y: {@last_y})</p>
+      <%!-- Input grid (top portion) --%>
+      <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1.5rem; padding: 2rem;">
+        <button
+          :for={{value, index} <- Enum.with_index(@inputs)}
+          phx-click="tap_input"
+          phx-value-index={index}
+          style={"
+            border: 2px solid #333;
+            border-radius: 1rem;
+            background: #{input_cell_colour(value)};
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: #{if value > 0.5, do: "#000", else: "#888"};
+            font-family: inherit;
+            transition: background 0.1s;
+          "}
+        >
+          {brightness_pct(value)}
+        </button>
+      </div>
+
+      <%!-- HUD (bottom portion) --%>
+      <div style="padding: 1.5rem 2rem; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 1rem;">
+        <%!-- Stats row --%>
+        <div style="display: flex; justify-content: space-between; font-size: 1.25rem;">
+          <span>Iteration: {@iteration}</span>
+          <span>Loss: {format_loss(@loss)}</span>
+        </div>
+
+        <%!-- Output bars --%>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          <span style="font-size: 1.1rem; min-width: 5rem;">Outputs:</span>
+          <div :for={{value, index} <- Enum.with_index(@outputs)} style="flex: 1; display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 1rem; min-width: 1.5rem; color: #888;">{index}</span>
+            <div style="flex: 1; height: 2rem; background: #222; border-radius: 0.25rem; overflow: hidden;">
+              <div style={"height: 100%; width: #{brightness_pct(value)}; background: #4a9; border-radius: 0.25rem; transition: width 0.15s;"}></div>
+            </div>
+            <span style="font-size: 1rem; min-width: 3.5rem; text-align: right;">{format_output(value)}</span>
+          </div>
+        </div>
+
+        <%!-- Buttons --%>
+        <div style="display: flex; gap: 1rem;">
+          <button
+            phx-click="reset_weights"
+            style="flex: 1; padding: 0.75rem; font-size: 1.25rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
+          >
+            Reset weights
+          </button>
+          <button
+            phx-click="clear_inputs"
+            style="flex: 1; padding: 0.75rem; font-size: 1.25rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
+          >
+            Clear inputs
+          </button>
         </div>
       </div>
     </div>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".TouchPulse">
-      const TOUCH_TYPE_TO_POINTER = {down: "pointerdown", move: "pointermove", up: "pointerup"};
 
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".TouchClick">
       export default {
         mounted() {
           this.handleEvent("server-touch", ({type, x, y}) => {
-            const target = document.elementFromPoint(x, y) || document.body;
-            const pointerType = TOUCH_TYPE_TO_POINTER[type];
-            if (pointerType) {
-              target.dispatchEvent(new PointerEvent(pointerType, {
+            if (type !== "down") return;
+            const target = document.elementFromPoint(x, y);
+            if (target) {
+              target.dispatchEvent(new MouseEvent("click", {
                 bubbles: true, cancelable: true,
                 clientX: x, clientY: y,
-                pointerId: 1, pointerType: "touch", isPrimary: true,
-                pressure: type === "up" ? 0 : 0.5,
               }));
             }
-            if (type === "down") this.spawnCircle(x, y);
           });
-        },
-
-        spawnCircle(x, y) {
-          const circle = document.createElement("div");
-          Object.assign(circle.style, {
-            position: "absolute",
-            left: `${x}px`,
-            top: `${y}px`,
-            width: "0px",
-            height: "0px",
-            borderRadius: "50%",
-            background: "radial-gradient(circle, #0f0 0%, transparent 70%)",
-            transform: "translate(-50%, -50%)",
-            pointerEvents: "none",
-            opacity: "0.8",
-          });
-          this.el.appendChild(circle);
-
-          const start = performance.now();
-          const duration = 1200;
-          const maxSize = 120;
-
-          const animate = (now) => {
-            const t = (now - start) / duration;
-            if (t >= 1) { circle.remove(); return; }
-            const size = maxSize * t;
-            const pulse = 0.8 * (1 - t) * (0.6 + 0.4 * Math.sin(t * Math.PI * 4));
-            circle.style.width = `${size}px`;
-            circle.style.height = `${size}px`;
-            circle.style.opacity = `${pulse}`;
-            requestAnimationFrame(animate);
-          };
-          requestAnimationFrame(animate);
         },
       };
     </script>
     """
+  end
+
+  defp input_cell_colour(value) do
+    # Dark to bright teal as value increases
+    r = round(value * 30)
+    g = round(value * 200 + 20)
+    b = round(value * 180 + 20)
+    "rgb(#{r}, #{g}, #{b})"
   end
 end
