@@ -4,7 +4,8 @@ defmodule NeonPerceptron.Builds.V2 do
 
   A 4→3→2 network demonstrating that a hidden layer with nonlinear activation
   can solve linearly inseparable problems (XOR). Physical layout: 12 TLC5947
-  boards across 5 SPI columns on a single reTerminal DM.
+  boards across 5 chip selects (SPI0 CE0/CE1 + SPI1 CE0/CE1/CE2) on a single
+  reTerminal DM.
 
   The 2x2 input grid has two diagonal patterns:
   - Left diagonal:  `[[1,0],[0,1]]` → output[0] = 1
@@ -12,13 +13,13 @@ defmodule NeonPerceptron.Builds.V2 do
 
   ## Physical layout
 
-  | SPI | Column       | Boards | Network nodes                     |
-  |-----|-------------|--------|----------------------------------|
-  | 1   | input_left   | 2      | input[0], input[2]               |
-  | 2   | input_right  | 2      | input[1], input[3]               |
-  | 3   | hidden_front | 3      | hidden_0[0], hidden_0[1], hidden_0[2] |
-  | 4   | hidden_rear  | 3      | Same 3 hidden nodes (back-to-back) |
-  | 5   | output       | 2      | output[0], output[1]             |
+  | spidev   | Column       | Boards | Network nodes                     |
+  |----------|-------------|--------|----------------------------------|
+  | spidev0.0 | input_left   | 2      | input[0], input[2]               |
+  | spidev0.1 | input_right  | 2      | input[1], input[3]               |
+  | spidev1.0 | hidden_front | 3      | hidden_0[0], hidden_0[1], hidden_0[2] |
+  | spidev1.1 | hidden_rear  | 3      | Same 3 hidden nodes (back-to-back) |
+  | spidev1.2 | output       | 2      | output[0], output[1]             |
   """
 
   alias NeonPerceptron.{Board, NetworkState}
@@ -45,8 +46,8 @@ defmodule NeonPerceptron.Builds.V2 do
   @doc """
   Column configurations for the 5 SPI channels.
 
-  SPI device paths are placeholders --- actual paths depend on the device tree
-  overlay configuration on the reTerminal DM.
+  Requires dtoverlay=spi1-3cs in config.txt (and CAN/audio overlays omitted)
+  to make SPI1 CE0/CE1/CE2 available on GPIO 18/17/16.
   """
   def column_configs do
     render = &render_node/2
@@ -96,7 +97,7 @@ defmodule NeonPerceptron.Builds.V2 do
       },
       %{
         id: :output,
-        spi_device: "spidev2.0",
+        spi_device: "spidev1.2",
         boards: [
           %{layer: "output", node_index: 0},
           %{layer: "output", node_index: 1}

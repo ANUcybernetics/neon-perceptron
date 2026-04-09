@@ -66,23 +66,22 @@ Central hub connecting the CM4 40-pin header to the node board columns:
 | LoRa module (if fitted)   | GPIO 7 (CE1)                  | Not using LoRa                       |
 | TLV320AIC3104 audio codec | GPIO 18, 19, 20, 21 (I2S/PCM) | Not using audio; frees pins for SPI1 |
 
-### SPI allocation (4 chip selects, one per column)
+### SPI allocation (5 chip selects across 2 buses)
 
 **SPI0** (GPIO 9 MISO, 10 MOSI, 11 SCLK)
 
-| CS line | GPIO | Column       | Boards | Transfer size            |
-| ------- | ---- | ------------ | ------ | ------------------------ |
-| CE0     | 8    | Input        | 4      | 4 × 24 × 12 = 1,152 bits |
-| CE1     | 7    | Hidden front | 3      | 3 × 24 × 12 = 864 bits   |
+| CS line | GPIO | spidev   | Column       | Boards | Transfer size             |
+| ------- | ---- | -------- | ------------ | ------ | ------------------------- |
+| CE0     | 8    | spidev0.0 | Input left   | 2      | 2 × 24 × 12 = 576 bits   |
+| CE1     | 7    | spidev0.1 | Input right  | 2      | 2 × 24 × 12 = 576 bits   |
 
-**SPI1** (GPIO 19 MISO, 20 MOSI, 21 SCLK)
+**SPI1** (GPIO 19 MISO, 20 MOSI, 21 SCLK) --- requires `dtoverlay=spi1-3cs`
 
-| CS line | GPIO | Column      | Boards | Transfer size          |
-| ------- | ---- | ----------- | ------ | ---------------------- |
-| CE0     | 18   | Hidden rear | 3      | 3 × 24 × 12 = 864 bits |
-| CE1     | 17   | Output      | 2      | 2 × 24 × 12 = 576 bits |
-
-SPI1 CE2 (GPIO 16) is spare.
+| CS line | GPIO | spidev   | Column       | Boards | Transfer size             |
+| ------- | ---- | -------- | ------------ | ------ | ------------------------- |
+| CE0     | 18   | spidev1.0 | Hidden front | 3      | 3 × 24 × 12 = 864 bits   |
+| CE1     | 17   | spidev1.1 | Hidden rear  | 3      | 3 × 24 × 12 = 864 bits   |
+| CE2     | 16   | spidev1.2 | Output       | 2      | 2 × 24 × 12 = 576 bits   |
 
 ### Network topology
 
@@ -91,11 +90,22 @@ SPI1 CE2 (GPIO 16) is spare.
 - Output layer: 2 nodes
 - Total: 9 nodes, 12 boards
 
+### Device tree overlay setup
+
+The reterminal_dm system overlay has been split into composable pieces. For the
+neon perceptron build, config.txt should load:
+
+- `dtoverlay=reTerminal-dm-base` (core hardware)
+- `dtoverlay=spi1-3cs` (enables SPI1 with 3 chip selects)
+
+And omit `reTerminal-dm-can` and `reTerminal-dm-audio` (plus `dtparam=i2s=on`
+and `dtparam=audio=on`) to free the SPI1 GPIOs.
+
 ### Still to decide
 
 - Capacitive touch controller IC and interface for the 2×2 input digitiser
-- Whether SPI1 CE1 on GPIO 17 works cleanly given the optocoupler circuitry on
-  that DI pin
+- Whether SPI1 CE1 on GPIO 17 and CE2 on GPIO 16 work cleanly given the
+  optocoupler circuitry on those DI pins
 - LED mapping: which of the 18 individual LEDs + big LED RGB channels represent
   what (activation, weights, bias, etc.)
 
