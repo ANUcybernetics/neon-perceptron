@@ -4,6 +4,7 @@ import "phoenix_html";
 import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";
 import { DigitalTwin } from "./hooks/digital_twin";
+import { hooks as colocatedHooks } from "phoenix-colocated/neon_perceptron";
 
 const csrfToken = document
   .querySelector("meta[name='csrf-token']")
@@ -11,6 +12,7 @@ const csrfToken = document
 
 const hooks = {
   DigitalTwin,
+  ...colocatedHooks,
 };
 
 const liveSocket = new LiveSocket("/live", Socket, {

@@ -36,32 +36,24 @@ defmodule NeonPerceptronWeb.KioskLive do
         </div>
       </div>
     </div>
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".TouchPulse" runtime>
+    <script :type={Phoenix.LiveView.ColocatedHook} name=".TouchPulse">
       const TOUCH_TYPE_TO_POINTER = {down: "pointerdown", move: "pointermove", up: "pointerup"};
 
       export default {
         mounted() {
           this.handleEvent("server-touch", ({type, x, y}) => {
-            this.dispatchSyntheticPointer(type, x, y);
+            const target = document.elementFromPoint(x, y) || document.body;
+            const pointerType = TOUCH_TYPE_TO_POINTER[type];
+            if (pointerType) {
+              target.dispatchEvent(new PointerEvent(pointerType, {
+                bubbles: true, cancelable: true,
+                clientX: x, clientY: y,
+                pointerId: 1, pointerType: "touch", isPrimary: true,
+                pressure: type === "up" ? 0 : 0.5,
+              }));
+            }
             if (type === "down") this.spawnCircle(x, y);
           });
-        },
-
-        dispatchSyntheticPointer(type, x, y) {
-          const target = document.elementFromPoint(x, y) || document.body;
-          const pointerType = TOUCH_TYPE_TO_POINTER[type];
-          if (!pointerType) return;
-
-          target.dispatchEvent(new PointerEvent(pointerType, {
-            bubbles: true,
-            cancelable: true,
-            clientX: x,
-            clientY: y,
-            pointerId: 1,
-            pointerType: "touch",
-            isPrimary: true,
-            pressure: type === "up" ? 0 : 0.5,
-          }));
         },
 
         spawnCircle(x, y) {
@@ -96,7 +88,7 @@ defmodule NeonPerceptronWeb.KioskLive do
           };
           requestAnimationFrame(animate);
         },
-      }
+      };
     </script>
     """
   end

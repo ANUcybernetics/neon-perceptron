@@ -11,6 +11,7 @@ defmodule NeonPerceptron.MixProject do
       version: @version,
       elixir: "~> 1.19",
       archives: [nerves_bootstrap: "~> 1.14"],
+      compilers: [:phoenix_live_view] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       releases: [{@app, release()}]
