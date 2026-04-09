@@ -1,31 +1,51 @@
 defmodule NeonPerceptron.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
   @moduledoc false
 
   use Application
+
+  alias NeonPerceptron.{Trainer, Column}
 
   @impl true
   def start(_type, _args) do
     prepare_hardware()
     Nerves.Runtime.validate_firmware()
-    children = common_children() ++ target_children()
 
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
+    build = Application.get_env(:neon_perceptron, :build)
+    role = Application.get_env(:neon_perceptron, :role, :trainer)
+
+    children =
+      common_children() ++
+        build_children(build, role) ++
+        phoenix_children() ++
+        platform_children()
+
     opts = [strategy: :rest_for_one, name: NeonPerceptron.Supervisor]
     Supervisor.start_link(children, opts)
   end
 
   defp common_children do
     [
+      {Registry, keys: :unique, name: NeonPerceptron.ColumnRegistry},
       NeonPerceptron.Knob,
-      NeonPerceptron.Display,
       NeonPerceptron.Touch
     ]
   end
 
-  # List all child processes to be supervised
+  defp build_children(build, role) do
+    trainer =
+      if role == :trainer do
+        [{Trainer, build.trainer_config()}]
+      else
+        []
+      end
+
+    columns =
+      build.column_configs()
+      |> Enum.map(fn config -> {Column, config} end)
+
+    trainer ++ columns
+  end
+
   defp phoenix_children do
     [
       {Phoenix.PubSub, name: NeonPerceptron.PubSub},
@@ -35,17 +55,8 @@ defmodule NeonPerceptron.Application do
 
   if Mix.target() == :host do
     defp prepare_hardware, do: :ok
-
-    defp target_children do
-      [
-        {NeonPerceptron.Model25, [hidden_size: 9]}
-        | phoenix_children()
-      ]
-    end
+    defp platform_children, do: []
   else
-    # The reTerminal DM's DSI display requires a vc4 driver reload before
-    # the DRM device fully initialises. Must happen before Weston starts.
-    # See https://github.com/formrausch/frio_rpi4
     defp prepare_hardware do
       if System.find_executable("udevd") do
         System.cmd("udevd", ["--daemon"])
@@ -68,14 +79,7 @@ defmodule NeonPerceptron.Application do
       end
     end
 
-    defp target_children do
-      [
-        NeonPerceptron.Model
-        | phoenix_children() ++ kiosk_children()
-      ]
-    end
-
-    defp kiosk_children do
+    defp platform_children do
       [NeonPerceptron.Kiosk.Supervisor]
     end
   end

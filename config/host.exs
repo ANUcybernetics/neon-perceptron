@@ -8,6 +8,7 @@ config :nx, default_backend: EMLX.Backend
 # When running on host, hardware is typically not available, so modules
 # should gracefully degrade to simulation mode
 config :neon_perceptron, hardware_required: false
+config :neon_perceptron, build: NeonPerceptron.Builds.V2
 
 # Phoenix configuration (host only)
 config :neon_perceptron, NeonPerceptronWeb.Endpoint,

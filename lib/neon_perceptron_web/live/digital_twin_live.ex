@@ -11,7 +11,7 @@ defmodule NeonPerceptronWeb.DigitalTwinLive do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "weights")
+      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "network_state")
     end
 
     {:ok, socket}
@@ -30,7 +30,16 @@ defmodule NeonPerceptronWeb.DigitalTwinLive do
   end
 
   @impl true
-  def handle_info({:weights, data}, socket) do
+  def handle_info({:network_state, network_state}, socket) do
+    data = %{
+      weights: network_state.weights,
+      topology: %{
+        input_size: network_state.topology.sizes["input"],
+        hidden_size: network_state.topology.sizes["hidden_0"],
+        output_size: network_state.topology.sizes["output"]
+      }
+    }
+
     {:noreply, push_event(socket, "weights", data)}
   end
 end
