@@ -186,7 +186,7 @@ defmodule NeonPerceptronWeb.KioskLive do
             style="display: flex; align-items: center; gap: 0.75rem; flex: 1;"
           >
             <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 8rem;">
-              <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; flex-direction: column; justify-content: space-between; align-self: stretch; gap: 6px;">
               <div :for={pattern <- patterns} style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 1.5rem; height: 1.5rem; gap: 1px;">
                 <div
                   :for={cell <- pattern}
