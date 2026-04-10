@@ -5,10 +5,10 @@ defmodule NeonPerceptron.Builds.V2Test do
   alias NeonPerceptron.NetworkState
 
   describe "topology/0" do
-    test "defines a 4→3→2 network" do
+    test "defines a 4->3->3 network" do
       t = V2.topology()
       assert t.layers == ["input", "hidden_0", "output"]
-      assert t.sizes == %{"input" => 4, "hidden_0" => 3, "output" => 2}
+      assert t.sizes == %{"input" => 4, "hidden_0" => 3, "output" => 3}
     end
   end
 
@@ -21,12 +21,12 @@ defmodule NeonPerceptron.Builds.V2Test do
     test "columns have correct board counts" do
       configs = V2.column_configs()
       board_counts = Enum.map(configs, &length(&1.boards))
-      assert board_counts == [2, 2, 3, 3, 2]
+      assert board_counts == [2, 2, 3, 3, 3]
     end
 
-    test "total boards is 12" do
+    test "total boards is 13" do
       total = V2.column_configs() |> Enum.flat_map(& &1.boards) |> length()
-      assert total == 12
+      assert total == 13
     end
 
     test "all columns have render_fn" do
@@ -47,7 +47,7 @@ defmodule NeonPerceptron.Builds.V2Test do
       {init_fn, predict_fn} = Axon.build(model)
       params = init_fn.(Nx.tensor([[0, 0, 0, 0]], type: :f32), Axon.ModelState.empty())
       output = predict_fn.(params, Nx.tensor([[1, 0, 0, 1]], type: :f32))
-      assert Nx.shape(output) == {1, 2}
+      assert Nx.shape(output) == {1, 3}
     end
 
     test "model has no biases" do
@@ -67,8 +67,15 @@ defmodule NeonPerceptron.Builds.V2Test do
       {n, input_size} = Nx.shape(inputs)
       {^n, output_size} = Nx.shape(targets)
       assert input_size == 4
-      assert output_size == 2
-      assert n == 12
+      assert output_size == 3
+      assert n == 6
+    end
+  end
+
+  describe "output_labels/0" do
+    test "returns 3 class labels" do
+      labels = V2.output_labels()
+      assert labels == ["diagonal", "row", "column"]
     end
   end
 
@@ -82,8 +89,15 @@ defmodule NeonPerceptron.Builds.V2Test do
 
     test "big LEDs reflect activation brightness" do
       state = %NetworkState{
-        activations: %{"input" => [0.8, 0.0, 0.0, 0.0], "hidden_0" => [0, 0, 0], "output" => [0, 0]},
-        weights: %{"dense_0" => List.duplicate(0.0, 12), "dense_1" => List.duplicate(0.0, 6)},
+        activations: %{
+          "input" => [0.8, 0.0, 0.0, 0.0],
+          "hidden_0" => [0, 0, 0],
+          "output" => [0, 0, 0]
+        },
+        weights: %{
+          "dense_0" => List.duplicate(0.0, 12),
+          "dense_1" => List.duplicate(0.0, 9)
+        },
         topology: V2.topology()
       }
 

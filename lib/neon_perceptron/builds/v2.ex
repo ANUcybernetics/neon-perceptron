@@ -1,25 +1,51 @@
 defmodule NeonPerceptron.Builds.V2 do
   @moduledoc """
-  V2 build: mini XOR perceptron.
+  V2 build: 2x2 pattern classifier.
 
-  A 4->3->2 network demonstrating that a hidden layer with nonlinear activation
-  can solve linearly inseparable problems (XOR). Physical layout: 12 TLC5947
-  boards across 5 chip selects (SPI0 CE0/CE1 + SPI1 CE0/CE1/CE2) on a single
-  reTerminal DM.
+  A 4->3->3 network that classifies 2x2 binary input patterns into three
+  categories: diagonal, row, or column. Demonstrates that a hidden layer with
+  nonlinear activation can solve linearly inseparable classification problems
+  --- the core insight from Minsky & Papert's 1969 *Perceptrons* critique.
 
-  The 2x2 input grid has two diagonal patterns:
-  - Left diagonal:  `[[1,0],[0,1]]` -> output[0] = 1
-  - Right diagonal: `[[0,1],[1,0]]` -> output[1] = 1
+  ## Network
+
+  - **4 inputs**: 2x2 grid read row-major [top-left, top-right, bottom-left,
+    bottom-right], values 0.0--1.0 (continuous, driven by touch)
+  - **3 hidden** (tanh, no bias)
+  - **3 outputs** (softmax): probabilities summing to 1
+    - output[0] = diagonal (⟍ or ⟋)
+    - output[1] = row (top or bottom)
+    - output[2] = column (left or right)
+  - **Loss**: categorical cross-entropy
+
+  ## Training data
+
+  Only the 6 clean patterns are used for training. The 10 ambiguous patterns
+  (all off, all on, single corners, three-of-four) are deliberately excluded
+  so that the network's response to them is emergent --- viewers can explore
+  how the trained network generalises to inputs it hasn't seen.
+
+  | Pattern          | Inputs       | Label    |
+  |------------------|-------------|----------|
+  | left diagonal ⟍  | [1,0,0,1]   | diagonal |
+  | right diagonal ⟋ | [0,1,1,0]   | diagonal |
+  | top row          | [1,1,0,0]   | row      |
+  | bottom row       | [0,0,1,1]   | row      |
+  | left column      | [1,0,1,0]   | column   |
+  | right column     | [0,1,0,1]   | column   |
 
   ## Physical layout
 
-  | spidev   | Column       | Boards | Network nodes                     |
-  |----------|-------------|--------|----------------------------------|
-  | spidev0.0 | input_left   | 2      | input[0], input[2]               |
-  | spidev0.1 | input_right  | 2      | input[1], input[3]               |
-  | spidev1.0 | hidden_front | 3      | hidden_0[0], hidden_0[1], hidden_0[2] |
-  | spidev1.1 | hidden_rear  | 3      | Same 3 hidden nodes (back-to-back) |
-  | spidev1.2 | output       | 2      | output[0], output[1]             |
+  13 TLC5947 boards across 5 chip selects (SPI0 CE0/CE1 + SPI1 CE0/CE1/CE2)
+  on a single reTerminal DM.
+
+  | spidev    | Column       | Boards | Network nodes                          |
+  |-----------|-------------|--------|----------------------------------------|
+  | spidev0.0 | input_left   | 2      | input[0], input[2]                     |
+  | spidev0.1 | input_right  | 2      | input[1], input[3]                     |
+  | spidev1.0 | hidden_front | 3      | hidden_0[0], hidden_0[1], hidden_0[2]  |
+  | spidev1.1 | hidden_rear  | 3      | Same 3 hidden nodes (back-to-back)     |
+  | spidev1.2 | output       | 3      | output[0] (diag), output[1] (row), output[2] (col) |
 
   ## LED hardware per board (TLC5947, 24 channels)
 
@@ -57,20 +83,25 @@ defmodule NeonPerceptron.Builds.V2 do
 
   @topology %{
     layers: ["input", "hidden_0", "output"],
-    sizes: %{"input" => 4, "hidden_0" => 3, "output" => 2}
+    sizes: %{"input" => 4, "hidden_0" => 3, "output" => 3}
   }
 
+  @output_labels ["diagonal", "row", "column"]
+
   def topology, do: @topology
+  def output_labels, do: @output_labels
 
   @doc """
-  Trainer configuration for the XOR network.
+  Trainer configuration for the pattern classifier.
   """
   def trainer_config do
     %{
       build: __MODULE__,
       model_fn: &model/0,
       training_data_fn: &training_data/0,
-      topology: @topology
+      topology: @topology,
+      output_activation: :softmax,
+      loss_fn: &Axon.Losses.categorical_cross_entropy(&1, &2, reduction: :mean)
     }
   end
 
@@ -131,7 +162,8 @@ defmodule NeonPerceptron.Builds.V2 do
         spi_device: "spidev1.2",
         boards: [
           %{layer: "output", node_index: 0},
-          %{layer: "output", node_index: 1}
+          %{layer: "output", node_index: 1},
+          %{layer: "output", node_index: 2}
         ],
         render_fn: render,
         render_frame_fn: nil
@@ -140,39 +172,38 @@ defmodule NeonPerceptron.Builds.V2 do
   end
 
   @doc """
-  Axon model: 4 inputs -> 3 hidden (tanh) -> 2 outputs (sigmoid).
+  Axon model: 4 inputs -> 3 hidden (tanh) -> 3 outputs (softmax).
 
-  No bias terms, which makes XOR slightly harder to learn and more
-  interesting to watch train.
+  No bias terms, which makes the classification slightly harder to learn and
+  more interesting to watch train. Softmax ensures outputs are normalised
+  probabilities summing to 1.
   """
   def model do
     Axon.input("bits", shape: {nil, 4})
     |> Axon.dense(3, use_bias: false)
     |> Axon.tanh()
-    |> Axon.dense(2, use_bias: false)
-    |> Axon.sigmoid()
+    |> Axon.dense(3, use_bias: false)
+    |> Axon.softmax()
   end
 
   @doc """
-  XOR training data for a 2x2 grid.
+  Training data: 6 clean 2x2 patterns with one-hot class labels.
 
   The 4 inputs form a 2x2 grid read row-major: [top-left, top-right,
-  bottom-left, bottom-right]. The 2 outputs are:
-  - output[0]: left diagonal active (top-left == bottom-right, others off)
-  - output[1]: right diagonal active (top-right == bottom-left, others off)
+  bottom-left, bottom-right]. Targets are one-hot encoded:
+  - [1, 0, 0] = diagonal
+  - [0, 1, 0] = row
+  - [0, 0, 1] = column
+
+  Only the 6 unambiguous patterns are included. The network's response to
+  ambiguous inputs (all off, single corners, all on, etc.) is emergent.
   """
   def training_data do
     inputs =
       Nx.tensor(
         [
-          [0, 0, 0, 0],
           [1, 0, 0, 1],
           [0, 1, 1, 0],
-          [1, 1, 1, 1],
-          [1, 0, 0, 0],
-          [0, 1, 0, 0],
-          [0, 0, 1, 0],
-          [0, 0, 0, 1],
           [1, 1, 0, 0],
           [0, 0, 1, 1],
           [1, 0, 1, 0],
@@ -184,18 +215,12 @@ defmodule NeonPerceptron.Builds.V2 do
     targets =
       Nx.tensor(
         [
-          [0, 0],
-          [1, 0],
-          [0, 1],
-          [1, 1],
-          [0, 0],
-          [0, 0],
-          [0, 0],
-          [0, 0],
-          [0, 0],
-          [0, 0],
-          [0, 0],
-          [0, 0]
+          [1, 0, 0],
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+          [0, 0, 1]
         ],
         type: :f32
       )
@@ -255,13 +280,11 @@ defmodule NeonPerceptron.Builds.V2 do
   end
 
   defp activation_to_rgb(activation, "hidden_0") do
-    # tanh: [-1, 1] -> normalise to [0, 1] then map to hue
     t = (activation + 1) / 2
     hsv_to_rgb(t * 270, 1.0, 1.0)
   end
 
   defp activation_to_rgb(activation, "output") do
-    # sigmoid: [0, 1] -> map directly to hue
     hsv_to_rgb(activation * 270, 1.0, 1.0)
   end
 

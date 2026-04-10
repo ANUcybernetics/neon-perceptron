@@ -21,7 +21,7 @@ defmodule NeonPerceptron.TrainerTest do
       assert %NetworkState{} = state
       assert length(state.activations["input"]) == 4
       assert length(state.activations["hidden_0"]) == 3
-      assert length(state.activations["output"]) == 2
+      assert length(state.activations["output"]) == 3
       assert map_size(state.weights) == 2
     end
 
@@ -60,7 +60,7 @@ defmodule NeonPerceptron.TrainerTest do
   describe "predict/1" do
     test "returns prediction tensor" do
       result = Trainer.predict([1, 0, 0, 1])
-      assert {1, 2} = Nx.shape(result)
+      assert {1, 3} = Nx.shape(result)
     end
   end
 

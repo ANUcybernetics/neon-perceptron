@@ -19,7 +19,7 @@ defmodule NeonPerceptronWeb.KioskLive do
     {:ok,
      assign(socket,
        inputs: inputs,
-       outputs: [0.0, 0.0],
+       outputs: [0.0, 0.0, 0.0],
        iteration: 0,
        loss: 0.0
      )}
@@ -89,6 +89,14 @@ defmodule NeonPerceptronWeb.KioskLive do
 
   defp format_output(_), do: "---"
 
+  defp output_labels do
+    build = Application.get_env(:neon_perceptron, :build)
+
+    if function_exported?(build, :output_labels, 0),
+      do: build.output_labels(),
+      else: ["0", "1", "2"]
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -132,9 +140,8 @@ defmodule NeonPerceptronWeb.KioskLive do
 
         <%!-- Output bars --%>
         <div style="display: flex; gap: 1rem; align-items: center;">
-          <span style="font-size: 1.1rem; min-width: 5rem;">Outputs:</span>
-          <div :for={{value, index} <- Enum.with_index(@outputs)} style="flex: 1; display: flex; align-items: center; gap: 0.5rem;">
-            <span style="font-size: 1rem; min-width: 1.5rem; color: #888;">{index}</span>
+          <div :for={{value, label} <- Enum.zip(@outputs, output_labels())} style="flex: 1; display: flex; align-items: center; gap: 0.5rem;">
+            <span style="font-size: 0.9rem; min-width: 4rem; color: #888;">{label}</span>
             <div style="flex: 1; height: 2rem; background: #222; border-radius: 0.25rem; overflow: hidden;">
               <div style={"height: 100%; width: #{brightness_pct(value)}; background: #4a9; border-radius: 0.25rem; transition: width 0.15s;"}></div>
             </div>
