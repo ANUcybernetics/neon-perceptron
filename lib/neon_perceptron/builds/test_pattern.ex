@@ -1,11 +1,14 @@
 defmodule NeonPerceptron.Builds.TestPattern do
   @moduledoc """
-  Hardware test build: cycles both big LEDs through full-saturation hues at
-  ~0.25 Hz on all 5 SPI columns. No neural network, no training --- just a
-  colour wheel to verify SPI wiring.
+  Hardware test build: blinks both big LEDs on all 5 SPI columns, each with a
+  different fully-saturated hue (evenly spaced around the colour wheel). No
+  neural network, no training --- just a blink test to verify SPI wiring.
   """
 
   alias NeonPerceptron.Board
+
+  @column_count 5
+  @blink_period_ms 1000
 
   def topology, do: %{layers: [], sizes: %{}}
   def trainer_config, do: nil
@@ -16,27 +19,38 @@ defmodule NeonPerceptron.Builds.TestPattern do
   end
 
   def column_configs do
-    [
-      column(:input_left, "spidev0.0", 2),
-      column(:input_right, "spidev0.1", 2),
-      column(:hidden_front, "spidev1.0", 3),
-      column(:hidden_rear, "spidev1.1", 3),
-      column(:output, "spidev1.2", 2)
+    # TEST CONFIG: temporary board counts for bench testing (3 daisy-chained on
+    # spidev0.0, 1 each on the rest). Restore to Build.V2 counts (2/2/3/3/3)
+    # once hardware verification is complete.
+    columns = [
+      {:input_left, "spidev0.0", 3},
+      {:input_right, "spidev0.1", 1},
+      {:hidden_front, "spidev1.0", 1},
+      {:hidden_rear, "spidev1.1", 1},
+      {:output, "spidev1.2", 1}
     ]
+
+    columns
+    |> Enum.with_index()
+    |> Enum.map(fn {{id, spi_device, board_count}, index} ->
+      hue = index / @column_count * 360
+      column(id, spi_device, board_count, hue)
+    end)
   end
 
-  defp column(id, spi_device, board_count) do
+  defp column(id, spi_device, board_count, hue) do
     %{
       id: id,
       spi_device: spi_device,
       boards: List.duplicate(%{}, board_count),
       render_fn: nil,
-      render_frame_fn: fn _state -> render_frame(board_count) end
+      render_frame_fn: fn _state -> render_frame(board_count, hue) end
     }
   end
 
-  def render_frame(board_count) do
-    {r, g, b} = current_rgb()
+  def render_frame(board_count, hue) do
+    on? = rem(div(System.system_time(:millisecond), @blink_period_ms), 2) == 0
+    {r, g, b} = if on?, do: hsv_to_rgb(hue), else: {0.0, 0.0, 0.0}
 
     board =
       Board.blank()
@@ -48,12 +62,6 @@ defmodule NeonPerceptron.Builds.TestPattern do
       |> List.replace_at(Board.rear_blue(), b)
 
     List.duplicate(board, board_count) |> List.flatten()
-  end
-
-  defp current_rgb do
-    ms = System.system_time(:millisecond)
-    hue = rem(ms, 4000) / 4000 * 360
-    hsv_to_rgb(hue)
   end
 
   @doc false

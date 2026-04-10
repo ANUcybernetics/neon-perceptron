@@ -3,7 +3,7 @@ defmodule NeonPerceptron.Application do
 
   use Application
 
-  alias NeonPerceptron.{Trainer, Column}
+  alias NeonPerceptron.{Column, Trainer}
 
   @impl true
   def start(_type, _args) do
@@ -26,7 +26,6 @@ defmodule NeonPerceptron.Application do
   defp common_children do
     [
       {Registry, keys: :unique, name: NeonPerceptron.ColumnRegistry},
-      NeonPerceptron.Knob,
       NeonPerceptron.Touch
     ]
   end

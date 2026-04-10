@@ -15,8 +15,8 @@ config :neon_perceptron, hardware_required: true
 # :drm blocked by Cog framebuffer creation bug with ILI9881D DSI panel
 # (Igalia/cog#748). Using :wl with server-side touch workaround for now.
 config :neon_perceptron, kiosk_platform: :wl
-# config :neon_perceptron, build: NeonPerceptron.Builds.TestPattern
-config :neon_perceptron, build: NeonPerceptron.Builds.V2
+config :neon_perceptron, build: NeonPerceptron.Builds.TestPattern
+# config :neon_perceptron, build: NeonPerceptron.Builds.V2
 
 # Use shoehorn to start the main application. See the shoehorn
 # library documentation for more control in ordering how OTP
