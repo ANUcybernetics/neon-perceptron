@@ -22,7 +22,9 @@ defmodule NeonPerceptronWeb.KioskLive do
        outputs: [0.0, 0.0, 0.0],
        iteration: 0,
        loss: 0.0,
-       accuracy: 0.0
+       accuracy: 0.0,
+       diagram_nodes: [],
+       diagram_edges: []
      )}
   end
 
@@ -36,13 +38,16 @@ defmodule NeonPerceptronWeb.KioskLive do
 
   def handle_info({:network_state, state}, socket) do
     outputs = Map.get(state.activations, "output", [0.0, 0.0])
+    {diagram_nodes, diagram_edges} = compute_diagram(state)
 
     {:noreply,
      assign(socket,
        outputs: outputs,
        iteration: state.iteration,
        loss: state.loss,
-       accuracy: state.accuracy
+       accuracy: state.accuracy,
+       diagram_nodes: diagram_nodes,
+       diagram_edges: diagram_edges
      )}
   end
 
@@ -138,8 +143,8 @@ defmodule NeonPerceptronWeb.KioskLive do
       style="display: flex; flex-direction: column; width: 100vw; height: 100vh; background: #000; color: #eee; font-family: 'IBM Plex Mono', monospace; user-select: none; touch-action: none;"
     >
       <%!-- Input grid (square, centred) --%>
-      <div style="display: flex; justify-content: center; padding: 2rem 2rem 1rem;">
-        <div style="width: min(calc(100vw - 4rem), calc(100vh - 24rem)); aspect-ratio: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1.5rem;">
+      <div style="display: flex; justify-content: center; padding: 1.5rem 2rem 0.5rem;">
+        <div style="width: min(calc(100vw - 4rem), calc(100vh - 30rem)); aspect-ratio: 1; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1.5rem;">
           <button
             :for={{value, index} <- Enum.with_index(@inputs)}
             data-input-index={index}
@@ -163,57 +168,68 @@ defmodule NeonPerceptronWeb.KioskLive do
           </button>
         </div>
       </div>
-      <div style="text-align: center; color: #666; font-size: 0.9rem; padding-bottom: 0.5rem;">
+      <div style="text-align: center; color: #666; font-size: 0.8rem; padding-bottom: 0.25rem;">
         Tap or drag to light up input nodes
       </div>
 
       <%!-- HUD (bottom portion) --%>
-      <div style="flex: 1; padding: 1.5rem 2rem 2rem; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 1rem;">
-        <%!-- Training stats --%>
-        <div style="display: flex; justify-content: space-between; font-size: 1.1rem;">
-          <span>Epoch: {format_iteration(@iteration)}</span>
-          <span>Loss: {format_loss(@loss)}</span>
-          <span>Training accuracy: {format_accuracy(@accuracy)}</span>
-        </div>
-
-        <%!-- Classification output --%>
-        <div style="color: #888; font-size: 0.9rem; padding-top: 0.25rem;">
-          Classification (softmax output)
-        </div>
-        <div style="flex: 1; display: flex; flex-direction: column; gap: 0.75rem; justify-content: center;">
-          <div
-            :for={{value, {label, patterns}} <- Enum.zip(@outputs, Enum.zip(output_labels(), output_exemplars()))}
-            style="display: flex; align-items: center; gap: 0.75rem; flex: 1;"
-          >
-            <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 8rem;">
-              <div style="display: flex; flex-direction: column; justify-content: space-between; align-self: stretch; gap: 6px;">
-              <div :for={pattern <- patterns} style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 1.5rem; height: 1.5rem; gap: 1px;">
-                <div
-                  :for={cell <- pattern}
-                  style={"border-radius: 2px; background: #{if cell == 1.0, do: "#4a9", else: "#222"};"}
-                />
+      <div style="flex: 1; min-height: 0; padding: 0.75rem 2rem 1.5rem; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 0.5rem;">
+        <%!-- Main area: network diagram + output bars --%>
+        <div style="flex: 1; display: flex; gap: 1rem; min-height: 0;">
+          <%!-- Network diagram (2/3 width) --%>
+          <div style="flex: 2; min-width: 0; min-height: 0;">
+            <svg viewBox="0 0 300 200" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; display: block;">
+              <line
+                :for={e <- @diagram_edges}
+                x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                stroke={e.stroke} stroke-opacity={e.opacity} stroke-width={e.width}
+              />
+              <circle
+                :for={n <- @diagram_nodes}
+                cx={n.x} cy={n.y} r="9"
+                fill={n.fill} stroke="#555" stroke-width="1"
+              />
+            </svg>
+          </div>
+          <%!-- Vertical output bars (1/3 width) --%>
+          <div style="flex: 1; display: flex; gap: 0.5rem; align-items: stretch;">
+            <div
+              :for={{value, {label, patterns}} <- Enum.zip(@outputs, Enum.zip(output_labels(), output_exemplars()))}
+              style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem;"
+            >
+              <span style="font-size: 0.85rem; color: #aaa;">{format_output(value)}</span>
+              <div style="flex: 1; width: 100%; max-width: 3.5rem; background: #222; border-radius: 0.25rem; position: relative; overflow: hidden;">
+                <div style={"position: absolute; bottom: 0; width: 100%; height: #{brightness_pct(value)}; background: #4a9; border-radius: 0.25rem; transition: height 0.15s;"} />
               </div>
+              <span style="font-size: 0.7rem; color: #888;">{label}</span>
+              <div style="display: flex; flex-direction: row; gap: 3px; align-items: center;">
+                <div :for={pattern <- patterns} style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 1rem; height: 1rem; gap: 1px;">
+                  <div
+                    :for={cell <- pattern}
+                    style={"border-radius: 1px; background: #{if cell == 1.0, do: "#4a9", else: "#222"};"}
+                  />
+                </div>
               </div>
-              <span style="font-size: 1rem; color: #aaa;">{label}</span>
             </div>
-            <div style="flex: 1; min-height: 2.5rem; align-self: stretch; background: #222; border-radius: 0.25rem; overflow: hidden;">
-              <div style={"height: 100%; width: #{brightness_pct(value)}; background: #4a9; border-radius: 0.25rem; transition: width 0.15s;"}></div>
-            </div>
-            <span style="font-size: 1.1rem; min-width: 3.5rem; text-align: right;">{format_output(value)}</span>
           </div>
         </div>
 
-        <%!-- Buttons --%>
-        <div style="display: flex; gap: 1rem;">
+        <%!-- Bottom strip: stats (left) + buttons (right) --%>
+        <div style="display: flex; gap: 1rem; align-items: stretch;">
+          <div style="display: flex; flex-direction: column; justify-content: center; gap: 0.15rem; font-size: 0.95rem; min-width: 14rem;">
+            <span>Epoch: {format_iteration(@iteration)}</span>
+            <span>Loss: {format_loss(@loss)}</span>
+            <span>Accuracy: {format_accuracy(@accuracy)}</span>
+          </div>
           <button
             phx-click="reset_weights"
-            style="flex: 1; padding: 1rem; font-size: 1.25rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
+            style="flex: 1; font-size: 1.1rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
           >
             Reset weights
           </button>
           <button
             phx-click="clear_inputs"
-            style="flex: 1; padding: 1rem; font-size: 1.25rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
+            style="flex: 1; font-size: 1.1rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
           >
             Clear inputs
           </button>
@@ -284,6 +300,80 @@ defmodule NeonPerceptronWeb.KioskLive do
       };
     </script>
     """
+  end
+
+  defp compute_diagram(state) do
+    topology = state.topology
+    layers = topology.layers
+    num_layers = length(layers)
+
+    positions =
+      Map.new(layers, fn layer ->
+        li = Enum.find_index(layers, &(&1 == layer))
+        size = topology.sizes[layer]
+        x = round(20 + li / (num_layers - 1) * 260)
+        pts = for i <- 0..(size - 1), do: {x, round(15 + (i + 0.5) / size * 170)}
+        {layer, pts}
+      end)
+
+    nodes =
+      Enum.flat_map(layers, fn layer ->
+        acts = Map.get(state.activations, layer, [])
+
+        Enum.with_index(acts, fn act, i ->
+          {x, y} = Enum.at(positions[layer], i)
+          %{x: x, y: y, fill: node_fill(act)}
+        end)
+      end)
+
+    edges =
+      layers
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {[from_layer, to_layer], li} ->
+        from_size = topology.sizes[from_layer]
+        to_size = topology.sizes[to_layer]
+        kernel = Map.get(state.weights, "dense_#{li}", [])
+        from_acts = Map.get(state.activations, from_layer, [])
+
+        for i <- 0..(from_size - 1), j <- 0..(to_size - 1) do
+          contribution = Enum.at(from_acts, i, 0.0) * Enum.at(kernel, i * to_size + j, 0.0)
+          {x1, y1} = Enum.at(positions[from_layer], i)
+          {x2, y2} = Enum.at(positions[to_layer], j)
+          edge_attrs(x1, y1, x2, y2, contribution)
+        end
+      end)
+
+    {nodes, edges}
+  end
+
+  defp node_fill(act) do
+    a = abs(act)
+
+    if act >= 0 do
+      "rgb(#{round(20 + a * 48)},#{round(20 + a * 150)},#{round(20 + a * 133)})"
+    else
+      "rgb(#{round(20 + a * 210)},#{round(20 + a * 50)},20)"
+    end
+  end
+
+  defp edge_attrs(x1, y1, x2, y2, contribution) do
+    mag = min(abs(contribution), 2) / 2
+    c = :math.pow(mag, 0.45)
+
+    {stroke, opacity, width} =
+      cond do
+        mag < 0.001 -> {"#444", 0.15, 0.5}
+        contribution >= 0 -> {"rgb(68,170,153)", 0.15 + c * 0.7, 0.5 + c * 3}
+        true -> {"rgb(255,68,68)", 0.15 + c * 0.7, 0.5 + c * 3}
+      end
+
+    %{
+      x1: x1, y1: y1, x2: x2, y2: y2,
+      stroke: stroke,
+      opacity: Float.round(opacity, 2),
+      width: Float.round(width, 1)
+    }
   end
 
   defp input_cell_colour(value) do
