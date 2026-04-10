@@ -38,7 +38,6 @@ defmodule NeonPerceptron.MixProject do
       {:ring_logger, "~> 0.11.4"},
       {:toolshed, "~> 0.4.2"},
       {:req, "~> 0.5"},
-
       {:input_event, "~> 1.4"},
 
       # might not need all of these, can thin out later
@@ -67,6 +66,7 @@ defmodule NeonPerceptron.MixProject do
 
       # Development tools
       {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},
+      {:tidewave, "~> 0.5", only: :dev},
       {:usage_rules, "~> 1.2", only: [:dev, :test], runtime: false},
 
       # Allow Nerves.Runtime on host to support development, testing and CI.
@@ -81,7 +81,8 @@ defmodule NeonPerceptron.MixProject do
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
       # version updates, please review their release notes in case
       # changes to your application are needed.
-      {:reterminal_dm, "~> 2.0", github: "ANUcybernetics/reterminal_dm", tag: "v2.2.0", runtime: false, targets: :rpi4}
+      {:reterminal_dm, "~> 2.0", github: "ANUcybernetics/reterminal_dm", tag: "v2.2.0",
+       runtime: false, targets: :rpi4}
     ]
   end
 
