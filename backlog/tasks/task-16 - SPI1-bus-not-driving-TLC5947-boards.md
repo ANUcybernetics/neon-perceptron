@@ -33,16 +33,30 @@ RULED OUT:
 - SPI speed: manually tested with explicit speed_hz: 1_000_000, no change
 - Manual all-on test: sent 36 bytes of 0xFF to spidev1.1 with Ticker stopped --- board remained blank. Data enters shift register (cleared from random on boot) but non-zero patterns don't take effect
 
-OPEN HYPOTHESES:
-1. XLAT wiring: TLC5947 latches on XLAT rising edge. If XLAT is wired to CS, RPi auxiliary SPI1 may handle CS deassertion differently from SPI0. Check with oscilloscope whether CE pins on SPI1 actually toggle during transfers.
-2. SPI1 MOSI/SCLK wiring: SPI0 uses GPIO 10/11, SPI1 uses GPIO 20/21 --- entirely different physical pins. If boards are wired to SPI0 pins instead of SPI1, they would never see data. Verify wiring matches correct GPIO pins for each bus.
-3. CS-as-XLAT polarity/timing: even if CS toggles, the TLC5947 needs a clean rising edge on XLAT after all 288 bits are clocked in. The spi1-3cs device tree overlay may behave differently from SPI0 native CS handling.
-4. spidev0.1 sub-strobe artefact may be a related clue --- possibly a CS timing issue on SPI0 CE1 as well.
+ROOT CAUSE (probable):
+The power distribution board (v1.2) uses 32-pin connectors (CNJMA2006WR-2X16P-9T) to connect the RPi 40-pin header to node boards. The 32-pin connectors can carry at most 32 of the 40 header signals. SPI1 MOSI (GPIO 20, header pin 38) and SPI1 SCLK (GPIO 21, header pin 40) are on the highest-numbered pins of the 40-pin header --- beyond what the 32-pin connectors carry.
 
-SUGGESTED NEXT STEPS:
-- Probe SPI1 MOSI (GPIO 20), SCLK (GPIO 21), and CE0 (GPIO 18) with oscilloscope to confirm signals are present and CS toggles
-- Verify physical wiring: confirm TLC5947 SIN/SCLK/XLAT pins on SPI1 boards connect to GPIO 20/21 and the correct CE pin
-- If CS is not toggling or has wrong timing, consider using a separate GPIO for XLAT (pulse manually after each SPI transfer)
+This means SPI1 data/clock signals never physically reach any node board. All boards share SPI0 MOSI/SCLK (GPIO 10/11, header pins 19/23) for data. The SPI1 CS pins (GPIO 17/18, header pins 11/12) ARE on the connectors and serve as XLAT lines.
+
+Evidence supporting this:
+- SPI0 CE0 works: MOSI/SCLK/CE0 all within pins 1--32
+- SPI1 boards: TLC5947 shift registers get no data (random power-on state); CS/XLAT may still toggle but latches garbage
+- "Cleared from random" on spidev1.1 after Knob removal: TLC5947 shift register powers up all-zeros; first XLAT pulse (from GPIO 17 state transition) latched zeros into PWM registers
+
+spidev0.1 sub-strobe: likely caused by SPI0 bus contention --- Column GenServers were firing asynchronously, so spidev0.0 transfers could interleave with spidev0.1 transfers, causing spurious partial-data XLATs on the shared bus.
+
+VERIFICATION NEEDED:
+- Continuity check: probe GPIO 20 (header pin 38) to the SIN pad on a node board plugged into CN4/CN5/CN6. If no continuity, this confirms the root cause.
+- Alternatively: probe GPIO 10 (header pin 19) to the same SIN pad. If there IS continuity, all boards share SPI0 MOSI.
+
+FIX (implemented):
+Software workaround using SPI0 for all data + SPI1 dummy transfers for XLAT:
+- SPI1 columns (hidden_front, hidden_rear, output) send data via spidev0.0 (SPI0 MOSI/SCLK), then a 1-byte dummy transfer on spidev1.x toggles CS/XLAT
+- Transfers are ordered: SPI1 columns first, then spidev0.1, then spidev0.0 last (so input_left re-latches correct data after spurious CE0 XLATs)
+- Ticker/FrameCoordinator uses synchronous calls to guarantee ordering
+- See Column.xlat_spi_device option and FrameCoordinator module
+
+FUTURE: if confirmed, the power distribution board v1.3 should route GPIO 20/21 (SPI1 MOSI/SCLK) to CN4/CN5/CN6, replacing the current pass-through of pins 38/40. This would allow direct SPI1 transfers and eliminate the shared-bus workaround.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria

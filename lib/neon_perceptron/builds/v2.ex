@@ -91,6 +91,11 @@ defmodule NeonPerceptron.Builds.V2 do
   def topology, do: @topology
   def output_labels, do: @output_labels
 
+  def extra_children do
+    ids = Enum.map(column_configs(), & &1.id)
+    [{NeonPerceptron.FrameCoordinator, ids}]
+  end
+
   @doc """
   Trainer configuration for the pattern classifier.
   """
@@ -110,34 +115,22 @@ defmodule NeonPerceptron.Builds.V2 do
 
   Requires dtoverlay=spi1-3cs in config.txt (and CAN/audio overlays omitted)
   to make SPI1 CE0/CE1/CE2 available on GPIO 18/17/16.
+
+  SPI1 columns use spidev0.0 for data (shared SPI0 MOSI/SCLK) and a spidev1.x
+  dummy transfer to pulse XLAT via its CS line. See TASK-16 for details.
+
+  Order matters: SPI1 columns first, then spidev0.1, then spidev0.0 last so
+  input_left re-latches its own correct data after spurious CE0 XLATs.
   """
   def column_configs do
     render = &render_node/2
 
     [
       %{
-        id: :input_left,
-        spi_device: "spidev0.0",
-        boards: [
-          %{layer: "input", node_index: 0},
-          %{layer: "input", node_index: 2}
-        ],
-        render_fn: render,
-        render_frame_fn: nil
-      },
-      %{
-        id: :input_right,
-        spi_device: "spidev0.1",
-        boards: [
-          %{layer: "input", node_index: 1},
-          %{layer: "input", node_index: 3}
-        ],
-        render_fn: render,
-        render_frame_fn: nil
-      },
-      %{
         id: :hidden_front,
-        spi_device: "spidev1.0",
+        spi_device: "spidev0.0",
+        xlat_spi_device: "spidev1.0",
+        pubsub_subscribe: false,
         boards: [
           %{layer: "hidden_0", node_index: 0},
           %{layer: "hidden_0", node_index: 1},
@@ -148,7 +141,9 @@ defmodule NeonPerceptron.Builds.V2 do
       },
       %{
         id: :hidden_rear,
-        spi_device: "spidev1.1",
+        spi_device: "spidev0.0",
+        xlat_spi_device: "spidev1.1",
+        pubsub_subscribe: false,
         boards: [
           %{layer: "hidden_0", node_index: 0},
           %{layer: "hidden_0", node_index: 1},
@@ -159,11 +154,35 @@ defmodule NeonPerceptron.Builds.V2 do
       },
       %{
         id: :output,
-        spi_device: "spidev1.2",
+        spi_device: "spidev0.0",
+        xlat_spi_device: "spidev1.2",
+        pubsub_subscribe: false,
         boards: [
           %{layer: "output", node_index: 0},
           %{layer: "output", node_index: 1},
           %{layer: "output", node_index: 2}
+        ],
+        render_fn: render,
+        render_frame_fn: nil
+      },
+      %{
+        id: :input_right,
+        spi_device: "spidev0.1",
+        pubsub_subscribe: false,
+        boards: [
+          %{layer: "input", node_index: 1},
+          %{layer: "input", node_index: 3}
+        ],
+        render_fn: render,
+        render_frame_fn: nil
+      },
+      %{
+        id: :input_left,
+        spi_device: "spidev0.0",
+        pubsub_subscribe: false,
+        boards: [
+          %{layer: "input", node_index: 0},
+          %{layer: "input", node_index: 2}
         ],
         render_fn: render,
         render_frame_fn: nil

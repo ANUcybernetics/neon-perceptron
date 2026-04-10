@@ -22,30 +22,44 @@ defmodule NeonPerceptron.Builds.TestPattern do
     # TEST CONFIG: temporary board counts for bench testing (3 daisy-chained on
     # spidev0.0, 1 each on the rest). Restore to Build.V2 counts (2/2/3/3/3)
     # once hardware verification is complete.
+    #
+    # SPI1 columns use spidev0.0 for data (shared SPI0 MOSI/SCLK) and a
+    # spidev1.x dummy transfer to pulse XLAT via its CS line. The power
+    # distribution board's 32-pin connectors don't carry GPIO 20/21 (SPI1
+    # MOSI/SCLK, 40-pin header pins 38/40), so all boards receive data via
+    # SPI0 only.
+    #
+    # ORDER MATTERS: SPI1 columns first (each spidev0.0 transfer causes a
+    # spurious CE0 XLAT on input_left), then spidev0.1, then spidev0.0 last
+    # so input_left re-latches its own correct data.
     columns = [
-      {:input_left, "spidev0.0", 3},
-      {:input_right, "spidev0.1", 1},
-      {:hidden_front, "spidev1.0", 1},
-      {:hidden_rear, "spidev1.1", 1},
-      {:output, "spidev1.2", 1}
+      {:hidden_front, "spidev0.0", 1, "spidev1.0"},
+      {:hidden_rear, "spidev0.0", 1, "spidev1.1"},
+      {:output, "spidev0.0", 1, "spidev1.2"},
+      {:input_right, "spidev0.1", 1, nil},
+      {:input_left, "spidev0.0", 3, nil}
     ]
 
     columns
     |> Enum.with_index()
-    |> Enum.map(fn {{id, spi_device, board_count}, index} ->
+    |> Enum.map(fn {{id, spi_device, board_count, xlat_spi_device}, index} ->
       hue = index / @column_count * 360
-      column(id, spi_device, board_count, hue)
+      column(id, spi_device, board_count, hue, xlat_spi_device)
     end)
   end
 
-  defp column(id, spi_device, board_count, hue) do
-    %{
+  defp column(id, spi_device, board_count, hue, xlat_spi_device) do
+    config = %{
       id: id,
       spi_device: spi_device,
       boards: List.duplicate(%{}, board_count),
       render_fn: nil,
       render_frame_fn: fn _state -> render_frame(board_count, hue) end
     }
+
+    if xlat_spi_device,
+      do: Map.put(config, :xlat_spi_device, xlat_spi_device),
+      else: config
   end
 
   def render_frame(board_count, hue) do
@@ -104,7 +118,7 @@ defmodule NeonPerceptron.Builds.TestPattern do
     @impl true
     def handle_info(:tick, state) do
       for id <- state.column_ids do
-        NeonPerceptron.Column.update(id, nil)
+        NeonPerceptron.Column.update_sync(id, nil)
       end
 
       Process.send_after(self(), :tick, @frame_interval)

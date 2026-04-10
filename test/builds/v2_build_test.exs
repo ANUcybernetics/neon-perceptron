@@ -21,7 +21,7 @@ defmodule NeonPerceptron.Builds.V2Test do
     test "columns have correct board counts" do
       configs = V2.column_configs()
       board_counts = Enum.map(configs, &length(&1.boards))
-      assert board_counts == [2, 2, 3, 3, 3]
+      assert board_counts == [3, 3, 3, 2, 2]
     end
 
     test "total boards is 13" do

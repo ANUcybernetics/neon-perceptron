@@ -53,16 +53,25 @@ defmodule NeonPerceptron.Column do
 
   @impl true
   def init(config) do
-    if pubsub_available?() do
-      Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "network_state")
+    unless config[:pubsub_subscribe] == false do
+      if pubsub_available?() do
+        Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "network_state")
+      end
     end
 
     {spi, mode} = open_spi(config.spi_device)
+
+    {xlat_spi, xlat_mode} =
+      if config[:xlat_spi_device],
+        do: open_spi(config[:xlat_spi_device]),
+        else: {nil, nil}
 
     state = %{
       id: config.id,
       spi: spi,
       mode: mode,
+      xlat_spi: xlat_spi,
+      xlat_mode: xlat_mode,
       boards: config[:boards] || [],
       render_fn: config[:render_fn],
       render_frame_fn: config[:render_frame_fn]
@@ -86,6 +95,20 @@ defmodule NeonPerceptron.Column do
     GenServer.cast(via(column_id), {:update, network_state})
   end
 
+  @doc """
+  Synchronous version of `update/2`. Returns after the SPI transfer completes.
+  Use this when transfer ordering matters (e.g. shared SPI bus with per-column XLAT).
+  """
+  def update_sync(column_id, network_state) do
+    GenServer.call(via(column_id), {:update, network_state})
+  end
+
+  @impl true
+  def handle_call({:update, network_state}, _from, state) do
+    render_and_send(network_state, state)
+    {:reply, :ok, state}
+  end
+
   @impl true
   def handle_cast({:update, network_state}, state) do
     render_and_send(network_state, state)
@@ -96,6 +119,13 @@ defmodule NeonPerceptron.Column do
     channel_values = render_all_boards(network_state, state)
     data = channel_values |> Enum.reverse() |> Board.encode()
     spi_transfer(state.spi, state.mode, data)
+    pulse_xlat(state.xlat_spi, state.xlat_mode)
+  end
+
+  defp pulse_xlat(nil, _mode), do: :ok
+
+  defp pulse_xlat(xlat_spi, xlat_mode) do
+    spi_transfer(xlat_spi, xlat_mode, <<0>>)
   end
 
   defp render_all_boards(network_state, %{render_frame_fn: render_frame_fn})
