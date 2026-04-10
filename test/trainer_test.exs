@@ -1,11 +1,11 @@
 defmodule NeonPerceptron.TrainerTest do
   use ExUnit.Case, async: false
 
-  alias NeonPerceptron.{Trainer, NetworkState, Builds.V2}
+  alias NeonPerceptron.{Trainer, NetworkState}
+
+  @build Application.compile_env!(:neon_perceptron, :build)
 
   setup do
-    # Trainer is already started by the application supervisor with V2 config.
-    # Wait for it to have run a few training steps.
     Process.sleep(100)
     :ok
   end
@@ -17,12 +17,13 @@ defmodule NeonPerceptron.TrainerTest do
     end
 
     test "network_state returns a valid NetworkState" do
+      topology = @build.topology()
       state = Trainer.network_state()
       assert %NetworkState{} = state
-      assert length(state.activations["input"]) == 4
-      assert length(state.activations["hidden_0"]) == 3
-      assert length(state.activations["output"]) == 3
-      assert map_size(state.weights) == 2
+
+      for layer <- topology.layers do
+        assert length(state.activations[layer]) == topology.sizes[layer]
+      end
     end
 
     test "broadcasts network_state via PubSub" do
@@ -46,28 +47,35 @@ defmodule NeonPerceptron.TrainerTest do
 
   describe "set_web_input/1" do
     test "overrides input for activation computation" do
-      Trainer.set_web_input([1.0, 0.0, 0.0, 1.0])
+      topology = @build.topology()
+      input_size = topology.sizes["input"]
+      web_input = List.duplicate(1.0, input_size)
+
+      Trainer.set_web_input(web_input)
       Process.sleep(100)
 
       state = Trainer.network_state()
-      assert state.activations["input"] == [1.0, 0.0, 0.0, 1.0]
+      assert state.activations["input"] == web_input
 
-      # Reset so other tests aren't affected
       Trainer.set_web_input(nil)
     end
   end
 
   describe "predict/1" do
     test "returns prediction tensor" do
-      result = Trainer.predict([1, 0, 0, 1])
-      assert {1, 3} = Nx.shape(result)
+      topology = @build.topology()
+      input_size = topology.sizes["input"]
+      output_size = topology.sizes["output"]
+
+      result = Trainer.predict(List.duplicate(1, input_size))
+      assert {1, ^output_size} = Nx.shape(result)
     end
   end
 
   describe "topology/0" do
     test "returns the build topology" do
       topology = Trainer.topology()
-      assert topology == V2.topology()
+      assert topology == @build.topology()
     end
   end
 end
