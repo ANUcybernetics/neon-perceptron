@@ -135,12 +135,15 @@ defmodule NeonPerceptron.Trainer do
     weights = extract_weights(data, topology)
     activations = compute_activations(input, weights, topology, state.output_activation)
 
+    accuracy = compute_accuracy(state)
+
     %NetworkState{
       activations: activations,
       weights: weights,
       topology: topology,
       iteration: iteration,
-      loss: Nx.to_number(state.step_state.loss)
+      loss: Nx.to_number(state.step_state.loss),
+      accuracy: accuracy
     }
   end
 
@@ -212,6 +215,14 @@ defmodule NeonPerceptron.Trainer do
     exps = Enum.map(values, &:math.exp(&1 - max))
     sum = Enum.sum(exps)
     Enum.map(exps, &(&1 / sum))
+  end
+
+  defp compute_accuracy(state) do
+    {inputs, targets} = state.training_data
+    predictions = state.predict_fn.(state.step_state.model_state, inputs)
+    pred_classes = Nx.argmax(predictions, axis: 1)
+    true_classes = Nx.argmax(targets, axis: 1)
+    Nx.equal(pred_classes, true_classes) |> Nx.mean() |> Nx.to_number()
   end
 
   defp default_loss_fn(y_pred, y_true) do
