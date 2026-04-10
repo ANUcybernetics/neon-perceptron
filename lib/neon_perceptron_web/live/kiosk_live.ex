@@ -168,7 +168,7 @@ defmodule NeonPerceptronWeb.KioskLive do
       </div>
 
       <%!-- HUD (bottom portion) --%>
-      <div style="flex: 1; padding: 1rem 2rem 1.5rem; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 0.75rem;">
+      <div style="flex: 1; padding: 1.5rem 2rem 2rem; border-top: 1px solid #333; display: flex; flex-direction: column; gap: 1rem;">
         <%!-- Training stats --%>
         <div style="display: flex; justify-content: space-between; font-size: 1.1rem;">
           <span>Epoch: {format_iteration(@iteration)}</span>
@@ -180,21 +180,23 @@ defmodule NeonPerceptronWeb.KioskLive do
         <div style="color: #888; font-size: 0.9rem; padding-top: 0.25rem;">
           Classification (softmax output)
         </div>
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 0.75rem; justify-content: center;">
           <div
             :for={{value, {label, patterns}} <- Enum.zip(@outputs, Enum.zip(output_labels(), output_exemplars()))}
-            style="display: flex; align-items: center; gap: 0.75rem;"
+            style="display: flex; align-items: center; gap: 0.75rem; flex: 1;"
           >
             <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 8rem;">
+              <div style="display: flex; flex-direction: column; gap: 6px;">
               <div :for={pattern <- patterns} style="display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; width: 1.5rem; height: 1.5rem; gap: 1px;">
                 <div
                   :for={cell <- pattern}
                   style={"border-radius: 2px; background: #{if cell == 1.0, do: "#4a9", else: "#222"};"}
                 />
               </div>
+              </div>
               <span style="font-size: 1rem; color: #aaa;">{label}</span>
             </div>
-            <div style="flex: 1; height: 2.5rem; background: #222; border-radius: 0.25rem; overflow: hidden;">
+            <div style="flex: 1; min-height: 2.5rem; align-self: stretch; background: #222; border-radius: 0.25rem; overflow: hidden;">
               <div style={"height: 100%; width: #{brightness_pct(value)}; background: #4a9; border-radius: 0.25rem; transition: width 0.15s;"}></div>
             </div>
             <span style="font-size: 1.1rem; min-width: 3.5rem; text-align: right;">{format_output(value)}</span>
@@ -202,16 +204,16 @@ defmodule NeonPerceptronWeb.KioskLive do
         </div>
 
         <%!-- Buttons --%>
-        <div style="display: flex; gap: 1rem; padding-top: 0.5rem;">
+        <div style="display: flex; gap: 1rem;">
           <button
             phx-click="reset_weights"
-            style="flex: 1; padding: 0.75rem; font-size: 1.25rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
+            style="flex: 1; padding: 1rem; font-size: 1.25rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
           >
             Reset weights
           </button>
           <button
             phx-click="clear_inputs"
-            style="flex: 1; padding: 0.75rem; font-size: 1.25rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
+            style="flex: 1; padding: 1rem; font-size: 1.25rem; font-family: inherit; background: #333; color: #eee; border: 1px solid #555; border-radius: 0.5rem; cursor: pointer;"
           >
             Clear inputs
           </button>
