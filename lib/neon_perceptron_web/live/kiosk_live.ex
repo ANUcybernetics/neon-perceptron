@@ -24,7 +24,8 @@ defmodule NeonPerceptronWeb.KioskLive do
        loss: 0.0,
        accuracy: 0.0,
        diagram_nodes: [],
-       diagram_edges: []
+       diagram_edges: [],
+       diagram_grids: []
      )}
   end
 
@@ -38,7 +39,7 @@ defmodule NeonPerceptronWeb.KioskLive do
 
   def handle_info({:network_state, state}, socket) do
     outputs = Map.get(state.activations, "output", [0.0, 0.0])
-    {diagram_nodes, diagram_edges} = compute_diagram(state)
+    {diagram_nodes, diagram_edges, diagram_grids} = compute_diagram(state)
 
     {:noreply,
      assign(socket,
@@ -47,7 +48,8 @@ defmodule NeonPerceptronWeb.KioskLive do
        loss: state.loss,
        accuracy: state.accuracy,
        diagram_nodes: diagram_nodes,
-       diagram_edges: diagram_edges
+       diagram_edges: diagram_edges,
+       diagram_grids: diagram_grids
      )}
   end
 
@@ -178,7 +180,12 @@ defmodule NeonPerceptronWeb.KioskLive do
         <div style="flex: 1; display: flex; gap: 1rem; min-height: 0;">
           <%!-- Network diagram (2/3 width) --%>
           <div style="flex: 2; min-width: 0; min-height: 0;">
-            <svg viewBox="0 0 300 200" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; display: block;">
+            <svg viewBox="0 0 400 200" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; display: block;">
+              <rect
+                :for={g <- @diagram_grids}
+                x={g.x} y={g.y} width={g.w} height={g.h}
+                rx={g.rx} fill={g.fill}
+              />
               <line
                 :for={e <- @diagram_edges}
                 x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
@@ -311,7 +318,7 @@ defmodule NeonPerceptronWeb.KioskLive do
       Map.new(layers, fn layer ->
         li = Enum.find_index(layers, &(&1 == layer))
         size = topology.sizes[layer]
-        x = round(20 + li / (num_layers - 1) * 260)
+        x = round(65 + li / (num_layers - 1) * 270)
         pts = for i <- 0..(size - 1), do: {x, round(15 + (i + 0.5) / size * 170)}
         {layer, pts}
       end)
@@ -344,16 +351,67 @@ defmodule NeonPerceptronWeb.KioskLive do
         end
       end)
 
-    {nodes, edges}
+    grids = input_indicator_grids(positions) ++ output_exemplar_grids(positions)
+
+    {nodes, edges, grids}
+  end
+
+  @grid_cell 5
+  @grid_gap 1
+  @grid_stride @grid_cell + @grid_gap
+
+  defp input_indicator_grids(positions) do
+    positions["input"]
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {{nx, ny}, idx} ->
+      gx = nx - 24
+      gy = ny - @grid_stride
+
+      for row <- 0..1, col <- 0..1 do
+        %{
+          x: gx + col * @grid_stride, y: gy + row * @grid_stride,
+          w: @grid_cell, h: @grid_cell, rx: 1,
+          fill: if(row * 2 + col == idx, do: "#3c8cff", else: "#333")
+        }
+      end
+    end)
+  end
+
+  defp output_exemplar_grids(positions) do
+    exemplars = output_exemplars()
+
+    positions["output"]
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {{nx, ny}, class_idx} ->
+      patterns = Enum.at(exemplars, class_idx, [])
+
+      patterns
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {pattern, pat_idx} ->
+        gx = nx + 16 + pat_idx * (@grid_stride * 2 + 3)
+        gy = ny - @grid_stride
+
+        pattern
+        |> Enum.with_index()
+        |> Enum.map(fn {val, cell_idx} ->
+          %{
+            x: gx + rem(cell_idx, 2) * @grid_stride,
+            y: gy + div(cell_idx, 2) * @grid_stride,
+            w: @grid_cell, h: @grid_cell, rx: 1,
+            fill: if(val == 1.0, do: "#3c8cff", else: "#333")
+          }
+        end)
+      end)
+    end)
   end
 
   defp node_fill(act) do
     a = abs(act)
 
     if act >= 0 do
-      "rgb(#{round(20 + a * 48)},#{round(20 + a * 150)},#{round(20 + a * 133)})"
+      "rgb(#{round(20 + a * 40)},#{round(20 + a * 120)},#{round(20 + a * 235)})"
     else
-      "rgb(#{round(20 + a * 210)},#{round(20 + a * 50)},20)"
+      "rgb(#{round(20 + a * 235)},#{round(20 + a * 120)},#{round(20 + a * 20)})"
     end
   end
 
@@ -364,8 +422,8 @@ defmodule NeonPerceptronWeb.KioskLive do
     {stroke, opacity, width} =
       cond do
         mag < 0.001 -> {"#444", 0.15, 0.5}
-        contribution >= 0 -> {"rgb(68,170,153)", 0.15 + c * 0.7, 0.5 + c * 3}
-        true -> {"rgb(255,68,68)", 0.15 + c * 0.7, 0.5 + c * 3}
+        contribution >= 0 -> {"rgb(60,140,255)", 0.15 + c * 0.7, 0.5 + c * 3}
+        true -> {"rgb(255,140,40)", 0.15 + c * 0.7, 0.5 + c * 3}
       end
 
     %{
