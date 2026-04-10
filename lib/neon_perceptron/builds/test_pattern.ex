@@ -14,8 +14,10 @@ defmodule NeonPerceptron.Builds.TestPattern do
   def trainer_config, do: nil
 
   def extra_children do
-    ids = Enum.map(column_configs(), & &1.id)
-    [{__MODULE__.Ticker, ids}]
+    # Ticker disabled for hardware diagnostics - re-enable to run blink test
+    # ids = Enum.map(column_configs(), & &1.id)
+    # [{__MODULE__.Ticker, ids}]
+    []
   end
 
   def column_configs do

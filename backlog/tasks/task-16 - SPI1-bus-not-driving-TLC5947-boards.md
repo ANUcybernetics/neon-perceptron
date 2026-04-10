@@ -13,50 +13,98 @@ dependencies: []
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-SPI0 (spidev0.0, spidev0.1) drives TLC5947 boards correctly --- LEDs blink as expected from the test pattern. SPI1 (spidev1.0, spidev1.1, spidev1.2) does not --- boards show solid random colours (uninitialised PWM registers), meaning data is either not reaching the shift registers or XLAT is never latching.
+Bench setup: power-distribution-v1.2 board with one TLC5947 node board on each of the 5 silk-screen-labelled positions (SPI0..SPI5, mapping: SPI0=spidev0.0 with 3 daisy-chained boards, SPI1=spidev0.1, SPI3=spidev1.0, SPI4=spidev1.1, SPI5=spidev1.2). TestPattern build with the per-tick Ticker disabled for diagnostics (extra_children returns []).
 
-Test setup: bench wiring (not full Build.V2) with 3 daisy-chained boards on spidev0.0, 1 board each on spidev0.1, spidev1.0, spidev1.1, spidev1.2. Running TestPattern build (1 Hz blink, distinct hue per column).
+The TestPattern Ticker is currently DISABLED in code so the bench can be exercised manually via SSH iex without anything overwriting state. Re-enable in `lib/neon_perceptron/builds/test_pattern.ex` `extra_children/0` when done.
 
-Results:
-- spidev0.0 (SPI0): 3 boards, blinking red --- correct
-- spidev0.1 (SPI1): 1 board, flashing green with fast sub-strobe artefact
-- spidev1.0 (SPI3): 1 board, solid random colours, no response to data
-- spidev1.1 (SPI4): 1 board, solid random colours, no response to data
-- spidev1.2 (SPI5): 1 board, solid random colours, no response to data
+## Verified facts (from diagnostic session 2026-04-10)
 
-RULED OUT:
-- SPI devices not present: all five /dev/spidev devices exist and Circuits.SPI.open/1 succeeds
-- Simulation fallback: no warnings in RingLogger, all columns opened real SPI handles
-- Column processes not running: all 5 Column GenServers alive and receiving Ticker updates
-- GPIO conflict with Knob module: Knob (V1) was claiming GPIO 17/18 (SPI1 CE0/CE1) as input with pull-ups. Removing it changed spidev1.1 from random to blank (= registers cleared), confirming data reaches shift register. But non-zero patterns still don't show. Knob removed in 43145d9
-- Board count mismatch: test pattern counts updated to match physical wiring, same result
-- SPI speed: manually tested with explicit speed_hz: 1_000_000, no change
-- Manual all-on test: sent 36 bytes of 0xFF to spidev1.1 with Ticker stopped --- board remained blank. Data enters shift register (cleared from random on boot) but non-zero patterns don't take effect
+Tests done with the Ticker removed and `Circuits.SPI.transfer!/2` called directly via SSH iex. Each test starts from a known blanked state (108 bytes of 0x00 sent via spidev0.0).
 
-ROOT CAUSE (probable):
-The power distribution board (v1.2) uses 32-pin connectors (CNJMA2006WR-2X16P-9T) to connect the RPi 40-pin header to node boards. The 32-pin connectors can carry at most 32 of the 40 header signals. SPI1 MOSI (GPIO 20, header pin 38) and SPI1 SCLK (GPIO 21, header pin 40) are on the highest-numbered pins of the 40-pin header --- beyond what the 32-pin connectors carry.
+1. **CE0 (spidev0.0) drives XLAT for the SP0 daisy chain.**
+   - 108 bytes of 0xFF → all 3 SP0 boards latch all-white (one CE0 toggle latches the whole chain).
+   - 36 bytes of 0xFF → only board 1 (closest to MCU) lights up; boards 2 and 3 keep their previous data. This is correct daisy-chain shift-register behaviour.
+   - 108 bytes of 0x00 → all 3 SP0 boards go dark.
 
-This means SPI1 data/clock signals never physically reach any node board. All boards share SPI0 MOSI/SCLK (GPIO 10/11, header pins 19/23) for data. The SPI1 CS pins (GPIO 17/18, header pins 11/12) ARE on the connectors and serve as XLAT lines.
+2. **CE1 (spidev0.1) does NOT visibly latch anything.**
+   - 36 bytes of 0xFF via spidev0.1 → no visible change anywhere (SP1, SP0, SPI3-5 all unchanged).
+   - In the previous firmware build (before this diagnostic session), spidev0.1 was producing a flashing green with sub-strobe on SP1. Something has changed --- possibly never reliable in the first place, or possibly disturbed by the spi1-3cs overlay or rapid bus switching.
 
-Evidence supporting this:
-- SPI0 CE0 works: MOSI/SCLK/CE0 all within pins 1--32
-- SPI1 boards: TLC5947 shift registers get no data (random power-on state); CS/XLAT may still toggle but latches garbage
-- "Cleared from random" on spidev1.1 after Knob removal: TLC5947 shift register powers up all-zeros; first XLAT pulse (from GPIO 17 state transition) latched zeros into PWM registers
+3. **SPI1 dummy transfers (spidev1.0/1.1) do NOT visibly latch anything.**
+   - With 0xFF data sitting in the shift register (loaded via spidev0.0), pulsing spidev1.0 (GPIO 18) → no visible change.
+   - Same for spidev1.1 (GPIO 17) → no visible change.
+   - spidev1.2 (GPIO 16, 40-pin header pin 36) NOT yet directly tested in this session, but theoretically pin 36 is beyond the 32-pin connector range so unlikely to reach anything.
 
-spidev0.1 sub-strobe: likely caused by SPI0 bus contention --- Column GenServers were firing asynchronously, so spidev0.0 transfers could interleave with spidev0.1 transfers, causing spurious partial-data XLATs on the shared bus.
+4. **SPI3-5 boards remain in their power-on random PWM state.** None of the transfers tested have visibly changed them, which means their XLAT lines aren't being driven by anything we're toggling from software.
 
-VERIFICATION NEEDED:
-- Continuity check: probe GPIO 20 (header pin 38) to the SIN pad on a node board plugged into CN4/CN5/CN6. If no continuity, this confirms the root cause.
-- Alternatively: probe GPIO 10 (header pin 19) to the same SIN pad. If there IS continuity, all boards share SPI0 MOSI.
+5. **SP0 board 1 sometimes "flashes" instead of going solid.** Observed multiple times --- behaviour is independent of any Ticker (which has been removed). Possible causes: TLC5947 board defect, GSCLK/oscillator issue on that specific board, or signal-integrity noise on its CS line. Not blocking other diagnostics.
 
-FIX (implemented):
-Software workaround using SPI0 for all data + SPI1 dummy transfers for XLAT:
-- SPI1 columns (hidden_front, hidden_rear, output) send data via spidev0.0 (SPI0 MOSI/SCLK), then a 1-byte dummy transfer on spidev1.x toggles CS/XLAT
-- Transfers are ordered: SPI1 columns first, then spidev0.1, then spidev0.0 last (so input_left re-latches correct data after spurious CE0 XLATs)
-- Ticker/FrameCoordinator uses synchronous calls to guarantee ordering
-- See Column.xlat_spi_device option and FrameCoordinator module
+## Ruled out (from earlier sessions)
 
-FUTURE: if confirmed, the power distribution board v1.3 should route GPIO 20/21 (SPI1 MOSI/SCLK) to CN4/CN5/CN6, replacing the current pass-through of pins 38/40. This would allow direct SPI1 transfers and eliminate the shared-bus workaround.
+- SPI devices not present: all 5 /dev/spidev devices exist and `Circuits.SPI.open/1` returns `{:ok, _}`.
+- Simulation fallback: no `:access_denied` or `unavailable` warnings in RingLogger.
+- Column processes not running: all 5 Column GenServers alive.
+- Knob (V1) GPIO conflict: removed in 43145d9. Behaviour unchanged.
+- SPI speed: manually tested with `speed_hz: 1_000_000`, no change.
+
+## Hypotheses still on the table
+
+H1. **Pins 33-40 of the RPi header are not on the 32-pin output connectors.** The CNJMA2006WR-2X16P-9T connectors have only 32 pins. If they map directly to header pins 1-32, then GPIO 16 (pin 36), GPIO 19 (pin 35), GPIO 20 (pin 38), GPIO 21 (pin 40), GPIO 26 (pin 37) all fail to reach the node boards. SPI1 MOSI/SCLK would be invisible to all node boards, explaining why direct SPI1 transfers do nothing. **Falsifiable by**: continuity check from header pin 38 (GPIO 20) to the SIN pad of any node board on a CN4/CN5/CN6 connector.
+
+H2. **Each connector has different XLAT routing and the node board's XLAT pin isn't on the same connector pin we think it is.** If the power distribution board cleverly routes a different GPIO to the same physical connector pin position on different connectors, we might be pulsing the wrong GPIO entirely. **Falsifiable by**: probing the XLAT pad on each node board with a scope while toggling each candidate CS pin in turn.
+
+H3. **CE1 (GPIO 7) has been claimed by something else in the device tree.** The reTerminal-dm-base overlay or similar might be holding GPIO 7 in a state that prevents the SPI driver from toggling it cleanly. **Falsifiable by**: checking `/sys/kernel/debug/gpio` or `/sys/class/gpio/` for GPIO 7 ownership; or scoping pin 26 of the 40-pin header during a spidev0.1 transfer.
+
+H4. **The SPI1 CS pins are toggling but too fast for the TLC5947 to latch.** TLC5947 datasheet specifies 20ns minimum XLAT pulse width; software-managed CS via spi-bcm2835aux should easily exceed this, but a buggy driver could produce a glitch. **Falsifiable by**: scoping pin 11/12 (GPIO 17/18) during spidev1.x dummy transfers and measuring CS pulse width.
+
+H5. **SP1 board has a hardware defect.** Possible but doesn't explain why SPI3-5 don't latch either. **Falsifiable by**: physically swapping the SP1 node board with a known-good one (e.g. one of the SP0 chain).
+
+## Systematic test plan (vary one thing at a time)
+
+Run these in order. Each test starts from a fresh ssh into iex on `nerves.local`. The Ticker is currently disabled so nothing competes for SPI.
+
+### Phase 1: hardware continuity (no software needed)
+
+T1. **Continuity check, header pin 38 (GPIO 20) → CN4/CN5/CN6.** Multimeter in continuity mode. If no beep, H1 is confirmed and SPI1 MOSI/SCLK simply aren't on the connectors. This is the highest-leverage test --- run it first.
+
+T2. **Continuity check, header pin 40 (GPIO 21) → CN4/CN5/CN6.** Same as T1 for SPI1 SCLK.
+
+T3. **Continuity check, header pin 19 (GPIO 10) → CN4/CN5/CN6.** Confirms whether SPI0 MOSI reaches the SPI1 connector positions (which would mean all boards share the SPI0 data bus).
+
+T4. **Continuity check, header pin 23 (GPIO 11) → CN4/CN5/CN6.** Same for SPI0 SCLK.
+
+T5. **Continuity check, every CS pin to the XLAT pad of the corresponding node board.** Check pins 11 (GPIO 17), 12 (GPIO 18), 24 (GPIO 8), 26 (GPIO 7), 36 (GPIO 16) → XLAT on the CN board they're supposed to drive. Identify the actual XLAT routing.
+
+### Phase 2: confirm software CS toggling
+
+T6. **Scope the CS line during a spidev1.0 transfer.** Boot the device, ssh in, and run:
+```elixir
+{:ok, spi} = Circuits.SPI.open("spidev1.0")
+for _ <- 1..1000, do: Circuits.SPI.transfer!(spi, <<0xAA>>)
+```
+While that loop runs, scope GPIO 18 (pin 12). Confirm CS toggles, measure low pulse width and rising edge. If CS does NOT toggle, the spi1-3cs overlay or driver is broken --- skip to T9.
+
+T7. Same for spidev1.1 (GPIO 17, pin 11) and spidev1.2 (GPIO 16, pin 36).
+
+T8. Same for spidev0.0 (GPIO 8, pin 24) and spidev0.1 (GPIO 7, pin 26). Verify the working CE0 looks identical to the non-working CE1.
+
+### Phase 3: in-software pin verification
+
+T9. **Read GPIO ownership from sysfs.** SSH in and check `cat /sys/kernel/debug/gpio | head -50` (might need to enable debugfs). Identify which GPIOs are owned by the SPI subsystems vs free.
+
+T10. **Try toggling a candidate XLAT GPIO via Circuits.GPIO directly** (after stopping any Column GenServer that might own it). If the SP1 board responds to a manual GPIO toggle, we know exactly which GPIO is its XLAT.
+
+### Phase 4: data path verification
+
+T11. **Send a unique pattern via spidev0.0** and physically observe the output channels: e.g. `Circuits.SPI.transfer!(spi00, <<0xF0, 0x00, 0x00, ...>>)` → only some channels should light. This confirms the SP0 boards interpret the data correctly.
+
+T12. **Send the same pattern via spidev0.1.** If CE1 ever latches anywhere, we'll see the same channel pattern light up on whichever board CE1 controls.
+
+## Notes for tomorrow
+
+- The Ticker in TestPattern is disabled (`extra_children/0` returns `[]`). Re-enable when diagnostics are done.
+- The xlat_spi_device + FrameCoordinator software workaround was implemented in commit 58b2a2c but **does not actually drive the SP1 or SPI3-5 boards** --- the SPI1 dummy transfers don't visibly latch anything. The fix needs to be revisited once we understand the actual XLAT routing.
+- The schematic PDFs are at `backlog/tasks/power-distribution-v1.2.pdf` and `backlog/tasks/v2.0-output-assignments.pdf`. The latter shows TLC5947 channel assignments but not the connector pinout.
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
