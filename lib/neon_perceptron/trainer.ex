@@ -24,6 +24,8 @@ defmodule NeonPerceptron.Trainer do
 
   @training_log_interval 5_000
   @broadcast_interval 33
+  @auto_reset_check_interval 3_000
+  @auto_reset_accuracy_threshold 0.9
 
   def start_link(config) do
     GenServer.start_link(__MODULE__, config, name: __MODULE__)
@@ -84,6 +86,13 @@ defmodule NeonPerceptron.Trainer do
         state
       end
 
+    state =
+      if iteration > 0 and rem(iteration, @auto_reset_check_interval) == 0 do
+        maybe_auto_reset(state)
+      else
+        state
+      end
+
     schedule_training_step()
     {:noreply, state}
   end
@@ -105,8 +114,7 @@ defmodule NeonPerceptron.Trainer do
 
   @impl true
   def handle_call(:reset, _from, state) do
-    step_state = state.init_fn.(state.training_data, Axon.ModelState.empty())
-    {:reply, :ok, %{state | step_state: step_state}}
+    {:reply, :ok, reinitialise(state)}
   end
 
   @impl true
@@ -126,6 +134,27 @@ defmodule NeonPerceptron.Trainer do
   def reset, do: GenServer.call(__MODULE__, :reset)
   def predict(input), do: GenServer.call(__MODULE__, {:predict, input})
   def set_web_input(input), do: GenServer.cast(__MODULE__, {:set_web_input, input})
+
+  defp reinitialise(state) do
+    step_state = state.init_fn.(state.training_data, Axon.ModelState.empty())
+    %{state | step_state: step_state}
+  end
+
+  defp maybe_auto_reset(state) do
+    accuracy = compute_accuracy(state)
+
+    if accuracy < @auto_reset_accuracy_threshold do
+      iteration = Nx.to_number(state.step_state.i)
+
+      Logger.info(
+        "[Trainer] auto-reset at iteration #{iteration} (accuracy #{Float.round(accuracy, 3)} < #{@auto_reset_accuracy_threshold})"
+      )
+
+      reinitialise(state)
+    else
+      state
+    end
+  end
 
   defp compute_network_state(state, iteration) do
     %{data: data} = state.step_state.model_state
