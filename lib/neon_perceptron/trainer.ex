@@ -3,7 +3,7 @@ defmodule NeonPerceptron.Trainer do
   Generic training GenServer parameterised by a build configuration.
 
   Continuously trains an Axon model and broadcasts a `NetworkState` via PubSub
-  so that Column processes and the web UI can render the network's current state.
+  so that Chain processes and the web UI can render the network's current state.
 
   ## Config
 

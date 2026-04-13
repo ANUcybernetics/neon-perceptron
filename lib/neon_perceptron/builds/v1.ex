@@ -42,7 +42,7 @@ defmodule NeonPerceptron.Builds.V1 do
     }
   end
 
-  def column_configs do
+  def chain_configs do
     [
       %{
         id: :v1_display,

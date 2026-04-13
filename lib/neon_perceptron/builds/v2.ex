@@ -36,16 +36,18 @@ defmodule NeonPerceptron.Builds.V2 do
 
   ## Physical layout
 
-  13 TLC5947 boards across 5 chip selects (SPI0 CE0/CE1 + SPI1 CE0/CE1/CE2)
-  on a single reTerminal DM.
+  13 TLC5947 boards across 2 SPI chains. The reTerminal DM carrier claims
+  GPIO 2/3 (SPI3 alt function) for i2c1/PCF857x (DSI reset, LCD power),
+  so we can't use 5 dedicated SPI buses. Instead, we daisy-chain
+  everything onto SPI0 except one input column which lives on SPI1.
 
-  | spidev    | Column       | Boards | Network nodes                          |
-  |-----------|-------------|--------|----------------------------------------|
-  | spidev0.0 | input_left   | 2      | input[0], input[2]                     |
-  | spidev0.1 | input_right  | 2      | input[1], input[3]                     |
-  | spidev1.0 | hidden_front | 3      | hidden_0[0], hidden_0[1], hidden_0[2]  |
-  | spidev1.1 | hidden_rear  | 3      | Same 3 hidden nodes (back-to-back)     |
-  | spidev1.2 | output       | 3      | output[0] (diag), output[1] (row), output[2] (col) |
+  | spidev    | Chain ID      | Chips | Contents                               |
+  |-----------|---------------|-------|----------------------------------------|
+  | spidev1.0 | `:input_left` | 2     | input[0], input[2]                     |
+  | spidev0.0 | `:main`       | 11    | input_right + hidden (front+rear) + output |
+
+  The wiring is purely a property of `chain_configs/0` --- edit that
+  single function to re-cable the installation.
 
   ## LED hardware per board (TLC5947, 24 channels)
 
@@ -91,11 +93,6 @@ defmodule NeonPerceptron.Builds.V2 do
   def topology, do: @topology
   def output_labels, do: @output_labels
 
-  def extra_children do
-    ids = Enum.map(column_configs(), & &1.id)
-    [{NeonPerceptron.FrameCoordinator, ids}]
-  end
-
   @doc """
   Trainer configuration for the pattern classifier.
   """
@@ -111,78 +108,50 @@ defmodule NeonPerceptron.Builds.V2 do
   end
 
   @doc """
-  Column configurations for the 5 SPI channels.
+  Chain configurations.
 
-  Requires dtoverlay=spi1-3cs in config.txt (and CAN/audio overlays omitted)
-  to make SPI1 CE0/CE1/CE2 available on GPIO 18/17/16.
+  Each entry describes one SPI chain: the `spi_device`, and an ordered
+  list of chips (`boards`) from the MOSI-side of the chain to the far
+  end. Each chip entry is `{layer, node_index}` --- the logical network
+  node that chip visualises. Repeating a node means "another physical
+  chip for the same node" (e.g. the front and rear big LEDs on the
+  hidden layer).
 
-  SPI1 columns use spidev0.0 for data (shared SPI0 MOSI/SCLK) and a spidev1.x
-  dummy transfer to pulse XLAT via its CS line. See TASK-16 for details.
+  To re-cable, just edit this function. No other code depends on the
+  wiring layout.
 
-  Order matters: SPI1 columns first, then spidev0.1, then spidev0.0 last so
-  input_left re-latches its own correct data after spurious CE0 XLATs.
+  Requires `dtoverlay=spi0-1cs` and `dtoverlay=spi1-1cs` in
+  `config/rpi4/config.txt`.
   """
-  def column_configs do
+  def chain_configs do
     render = &render_node/2
 
     [
       %{
-        id: :hidden_front,
-        spi_device: "spidev0.0",
-        xlat_spi_device: "spidev1.0",
-        pubsub_subscribe: false,
-        boards: [
-          %{layer: "hidden_0", node_index: 0},
-          %{layer: "hidden_0", node_index: 1},
-          %{layer: "hidden_0", node_index: 2}
-        ],
-        render_fn: render,
-        render_frame_fn: nil
-      },
-      %{
-        id: :hidden_rear,
-        spi_device: "spidev0.0",
-        xlat_spi_device: "spidev1.1",
-        pubsub_subscribe: false,
-        boards: [
-          %{layer: "hidden_0", node_index: 0},
-          %{layer: "hidden_0", node_index: 1},
-          %{layer: "hidden_0", node_index: 2}
-        ],
-        render_fn: render,
-        render_frame_fn: nil
-      },
-      %{
-        id: :output,
-        spi_device: "spidev0.0",
-        xlat_spi_device: "spidev1.2",
-        pubsub_subscribe: false,
-        boards: [
-          %{layer: "output", node_index: 0},
-          %{layer: "output", node_index: 1},
-          %{layer: "output", node_index: 2}
-        ],
-        render_fn: render,
-        render_frame_fn: nil
-      },
-      %{
-        id: :input_right,
-        spi_device: "spidev0.1",
-        pubsub_subscribe: false,
-        boards: [
-          %{layer: "input", node_index: 1},
-          %{layer: "input", node_index: 3}
-        ],
-        render_fn: render,
-        render_frame_fn: nil
-      },
-      %{
         id: :input_left,
-        spi_device: "spidev0.0",
-        pubsub_subscribe: false,
+        spi_device: "spidev1.0",
         boards: [
-          %{layer: "input", node_index: 0},
-          %{layer: "input", node_index: 2}
+          {"input", 0},
+          {"input", 2}
+        ],
+        render_fn: render,
+        render_frame_fn: nil
+      },
+      %{
+        id: :main,
+        spi_device: "spidev0.0",
+        boards: [
+          {"input", 1},
+          {"input", 3},
+          {"hidden_0", 0},
+          {"hidden_0", 1},
+          {"hidden_0", 2},
+          {"hidden_0", 0},
+          {"hidden_0", 1},
+          {"hidden_0", 2},
+          {"output", 0},
+          {"output", 1},
+          {"output", 2}
         ],
         render_fn: render,
         render_frame_fn: nil
@@ -254,7 +223,7 @@ defmodule NeonPerceptron.Builds.V2 do
   with no noodles; hidden/output nodes use RGB big LEDs with noodle pairs
   showing incoming edge contributions.
   """
-  def render_node(%NetworkState{} = state, %{layer: "input", node_index: index}) do
+  def render_node(%NetworkState{} = state, {"input", index}) do
     activation = NetworkState.activation_for_node(state, "input", index)
 
     Board.blank()
@@ -266,7 +235,7 @@ defmodule NeonPerceptron.Builds.V2 do
     |> List.replace_at(Board.rear_red(), activation)
   end
 
-  def render_node(%NetworkState{} = state, %{layer: layer, node_index: index}) do
+  def render_node(%NetworkState{} = state, {layer, index}) do
     activation = NetworkState.activation_for_node(state, layer, index)
     {r, g, b} = activation_to_rgb(activation, layer)
 

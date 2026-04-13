@@ -12,9 +12,9 @@ defmodule NeonPerceptron.Builds.V1Test do
     end
   end
 
-  describe "column_configs/0" do
-    test "returns 1 column with render_frame_fn" do
-      [config] = V1.column_configs()
+  describe "chain_configs/0" do
+    test "returns 1 chain with render_frame_fn" do
+      [config] = V1.chain_configs()
       assert config.id == :v1_display
       assert config.spi_device == "spidev0.0"
       assert is_function(config.render_frame_fn, 1)

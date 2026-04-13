@@ -12,26 +12,42 @@ defmodule NeonPerceptron.Builds.V2Test do
     end
   end
 
-  describe "column_configs/0" do
-    test "returns 5 columns" do
-      configs = V2.column_configs()
-      assert length(configs) == 5
+  describe "chain_configs/0" do
+    test "returns 2 chains" do
+      configs = V2.chain_configs()
+      assert length(configs) == 2
     end
 
-    test "columns have correct board counts" do
-      configs = V2.column_configs()
+    test "chains have correct board counts" do
+      configs = V2.chain_configs()
       board_counts = Enum.map(configs, &length(&1.boards))
-      assert board_counts == [3, 3, 3, 2, 2]
+      assert Enum.sort(board_counts) == [2, 11]
     end
 
     test "total boards is 13" do
-      total = V2.column_configs() |> Enum.flat_map(& &1.boards) |> length()
+      total = V2.chain_configs() |> Enum.flat_map(& &1.boards) |> length()
       assert total == 13
     end
 
-    test "all columns have render_fn" do
-      for config <- V2.column_configs() do
+    test "all chains have render_fn" do
+      for config <- V2.chain_configs() do
         assert is_function(config.render_fn, 2)
+      end
+    end
+
+    test "main chain is on spidev0.0 and input_left on spidev1.0" do
+      by_id = V2.chain_configs() |> Map.new(&{&1.id, &1})
+      assert by_id[:input_left].spi_device == "spidev1.0"
+      assert by_id[:main].spi_device == "spidev0.0"
+    end
+
+    test "every board entry references a valid layer and node index" do
+      %{layers: layers, sizes: sizes} = V2.topology()
+
+      for %{boards: boards} <- V2.chain_configs(),
+          {layer, index} <- boards do
+        assert layer in layers, "unknown layer #{inspect(layer)}"
+        assert index in 0..(sizes[layer] - 1), "index #{index} out of range for #{layer}"
       end
     end
   end
@@ -82,8 +98,7 @@ defmodule NeonPerceptron.Builds.V2Test do
   describe "render_node/2" do
     test "returns 24 channel values" do
       state = NetworkState.null(V2.topology())
-      board_spec = %{layer: "input", node_index: 0}
-      channels = V2.render_node(state, board_spec)
+      channels = V2.render_node(state, {"input", 0})
       assert length(channels) == 24
     end
 
@@ -101,7 +116,7 @@ defmodule NeonPerceptron.Builds.V2Test do
         topology: V2.topology()
       }
 
-      channels = V2.render_node(state, %{layer: "input", node_index: 0})
+      channels = V2.render_node(state, {"input", 0})
       assert Enum.at(channels, 18) == 0.8
       assert Enum.at(channels, 19) == 0.8
       assert Enum.at(channels, 20) == 0.8

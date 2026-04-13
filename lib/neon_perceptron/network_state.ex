@@ -1,9 +1,9 @@
 defmodule NeonPerceptron.NetworkState do
   @moduledoc """
-  The canonical data structure flowing from the trainer to display columns.
+  The canonical data structure flowing from the trainer to display chains.
 
   Contains layer activations, weight matrices, network topology, and the
-  current training iteration. Broadcast via PubSub so that Column processes
+  current training iteration. Broadcast via PubSub so that Chain processes
   (potentially on remote BEAM nodes) can render their boards.
   """
 

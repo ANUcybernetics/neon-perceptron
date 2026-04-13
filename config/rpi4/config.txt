@@ -46,7 +46,10 @@ dtparam=i2c1=on
 dtparam=i2c3=on
 gpio=13=pu
 dtoverlay=reTerminal-dm-base
-# CAN and audio omitted to free SPI0 CE0 and SPI1 GPIOs
+# CAN and audio omitted to avoid SPI pin conflicts
 #dtoverlay=reTerminal-dm-can
 #dtoverlay=reTerminal-dm-audio
-dtoverlay=spi1-3cs
+# Per-chain 1-CS overlays: SPI0 CE0 (GPIO 8) and SPI1 CE0 (GPIO 18)
+# drive XLAT for their respective TLC5947 daisy chains. See TASK-16.
+dtoverlay=spi0-1cs
+dtoverlay=spi1-1cs

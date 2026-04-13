@@ -3,7 +3,7 @@ defmodule NeonPerceptron.Application do
 
   use Application
 
-  alias NeonPerceptron.{Column, Trainer}
+  alias NeonPerceptron.{Chain, Trainer}
 
   @impl true
   def start(_type, _args) do
@@ -25,7 +25,7 @@ defmodule NeonPerceptron.Application do
 
   defp common_children do
     [
-      {Registry, keys: :unique, name: NeonPerceptron.ColumnRegistry},
+      {Registry, keys: :unique, name: NeonPerceptron.ChainRegistry},
       NeonPerceptron.Touch
     ]
   end
@@ -41,16 +41,16 @@ defmodule NeonPerceptron.Application do
         []
       end
 
-    columns =
-      build.column_configs()
-      |> Enum.map(fn config -> {Column, config} end)
+    chains =
+      build.chain_configs()
+      |> Enum.map(fn config -> {Chain, config} end)
 
     extra =
       if function_exported?(build, :extra_children, 0),
         do: build.extra_children(),
         else: []
 
-    trainer ++ columns ++ extra
+    trainer ++ chains ++ extra
   end
 
   defp phoenix_children do

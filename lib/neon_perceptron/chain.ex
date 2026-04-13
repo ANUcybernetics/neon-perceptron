@@ -1,21 +1,30 @@
-defmodule NeonPerceptron.Column do
+defmodule NeonPerceptron.Chain do
   @moduledoc """
-  GenServer driving one SPI column (chip select) of daisy-chained TLC5947 boards.
+  GenServer driving one SPI chain of daisy-chained TLC5947 boards.
 
-  Each Column subscribes to PubSub for `NetworkState` updates. On each update,
-  it calls the build's render function to produce PWM data for each board in the
-  chain, then sends the encoded binary over SPI.
+  Each Chain subscribes to PubSub for `NetworkState` updates, calls the
+  build's render function to produce PWM data for each chip in the chain,
+  concatenates into one buffer, and sends it over SPI. Under the
+  `spiN-1cs` overlay the kernel SPI driver toggles CE0 at transfer end,
+  which drives XLAT --- so all chips in the chain latch simultaneously
+  with no extra GPIO work.
 
   ## Config
 
-  A column config map has these keys:
+  A chain config map has these keys:
 
-  - `:id` --- atom identifying this column (e.g. `:input_left`)
-  - `:spi_device` --- SPI device path (e.g. `"spidev0.0"`)
-  - `:boards` --- list of board specs, each `%{layer: "input", node_index: 0}`
-  - `:render_fn` --- `(NetworkState.t(), board_spec) -> [float()]` returning 24 values
-  - `:render_frame_fn` --- alternative: `(NetworkState.t()) -> [float()]` returning
-    all N*24 values at once (for builds where boards don't map one-per-node)
+  - `:id` --- atom identifying this chain (e.g. `:input_left`, `:main`).
+  - `:spi_device` --- spidev path (e.g. `"spidev0.0"`).
+  - `:boards` --- ordered list of chips from MOSI-side to chain end. Each
+    entry is a tuple `{layer, node_index}` naming the logical node that
+    chip visualises. Repeating a node means "another physical chip for
+    the same node" (e.g. front + rear copies of a hidden node).
+  - `:render_fn` --- `(NetworkState.t(), {layer, index}) -> [float()]`
+    returning 24 channel values for one chip.
+  - `:render_frame_fn` --- alternative:
+    `(NetworkState.t()) -> [float()]` returning all `N*24` values for
+    the whole chain at once. Used by V1 where the pin mapping doesn't
+    follow one-chip-per-node.
 
   Exactly one of `:render_fn` or `:render_frame_fn` must be provided.
   """
@@ -25,7 +34,7 @@ defmodule NeonPerceptron.Column do
 
   alias NeonPerceptron.Board
 
-  @type board_spec :: %{layer: String.t(), node_index: non_neg_integer()}
+  @type board_spec :: {String.t(), non_neg_integer()}
 
   @type config :: %{
           id: atom(),
@@ -47,9 +56,9 @@ defmodule NeonPerceptron.Column do
   end
 
   @doc """
-  Registry-based name for a column process.
+  Registry-based name for a chain process.
   """
-  def via(id), do: {:via, Registry, {NeonPerceptron.ColumnRegistry, id}}
+  def via(id), do: {:via, Registry, {NeonPerceptron.ChainRegistry, id}}
 
   @impl true
   def init(config) do
@@ -61,17 +70,10 @@ defmodule NeonPerceptron.Column do
 
     {spi, mode} = open_spi(config.spi_device)
 
-    {xlat_spi, xlat_mode} =
-      if config[:xlat_spi_device],
-        do: open_spi(config[:xlat_spi_device]),
-        else: {nil, nil}
-
     state = %{
       id: config.id,
       spi: spi,
       mode: mode,
-      xlat_spi: xlat_spi,
-      xlat_mode: xlat_mode,
       boards: config[:boards] || [],
       render_fn: config[:render_fn],
       render_frame_fn: config[:render_frame_fn]
@@ -89,18 +91,19 @@ defmodule NeonPerceptron.Column do
   def handle_info(_msg, state), do: {:noreply, state}
 
   @doc """
-  Directly push a NetworkState update to this column (bypasses PubSub).
+  Directly push a NetworkState update to this chain (bypasses PubSub).
   """
-  def update(column_id, network_state) do
-    GenServer.cast(via(column_id), {:update, network_state})
+  def update(chain_id, network_state) do
+    GenServer.cast(via(chain_id), {:update, network_state})
   end
 
   @doc """
-  Synchronous version of `update/2`. Returns after the SPI transfer completes.
-  Use this when transfer ordering matters (e.g. shared SPI bus with per-column XLAT).
+  Synchronous version of `update/2`. Returns after the SPI transfer
+  completes. Rarely needed now that chains have independent XLATs ---
+  kept for use cases that want back-pressure.
   """
-  def update_sync(column_id, network_state) do
-    GenServer.call(via(column_id), {:update, network_state})
+  def update_sync(chain_id, network_state) do
+    GenServer.call(via(chain_id), {:update, network_state})
   end
 
   @impl true
@@ -119,13 +122,6 @@ defmodule NeonPerceptron.Column do
     channel_values = render_all_boards(network_state, state)
     data = channel_values |> Enum.reverse() |> Board.encode()
     spi_transfer(state.spi, state.mode, data)
-    pulse_xlat(state.xlat_spi, state.xlat_mode)
-  end
-
-  defp pulse_xlat(nil, _mode), do: :ok
-
-  defp pulse_xlat(xlat_spi, xlat_mode) do
-    spi_transfer(xlat_spi, xlat_mode, <<0>>)
   end
 
   defp render_all_boards(network_state, %{render_frame_fn: render_frame_fn})
@@ -151,7 +147,7 @@ defmodule NeonPerceptron.Column do
 
       {:error, reason} ->
         Logger.warning(
-          "SPI #{spi_device} unavailable (#{inspect(reason)}), column running in simulation mode"
+          "SPI #{spi_device} unavailable (#{inspect(reason)}), chain running in simulation mode"
         )
 
         {nil, :simulation}
