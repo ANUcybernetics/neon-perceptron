@@ -18,49 +18,81 @@ dependencies: []
 ### Status (2026-04-13)
 
 Brendan verified on the bench that all 5 SPI ports on the power distribution
-board are wired correctly and working end-to-end. His test files are checked
-in alongside this task: `backlog/tasks/brendan-config.txt` and
-`backlog/tasks/brendan-spi-test.py`. This invalidates most of the earlier
-debugging narrative (preserved in the "Superseded diagnostic notes" section
-below for context). The remaining work is a software rewrite.
+board are wired correctly and working end-to-end (test files checked in
+alongside this task: `backlog/tasks/brendan-config.txt` and
+`backlog/tasks/brendan-spi-test.py`). That rules out a board-level bug.
 
-The five columns each sit on their own dedicated SPI bus (not a shared
-SPI0/SPI1 data bus with per-column CS as we previously assumed). SPI3/4/5 are
-BCM2711 auxiliary peripherals available on both the Pi 4 and CM4. The
-reTerminal DM carrier exposes GPIO 0--27 on the same 40-pin header pinout, so
-Brendan's bench configuration maps onto our hardware 1:1 --- assuming no
-reTerminal-DM overlay silently claims any of the pins involved.
+However, Brendan's 5-dedicated-SPI-bus scheme **cannot coexist with the
+reTerminal DM display**. SPI3 requires GPIO 2/3 (ALT4); the reTerminal DM
+carrier already uses GPIO 2/3 as i2c1 for the PCF857x GPIO expander, which
+the DSI panel driver references for reset and LCD power-enable. The two alt
+functions are mutually exclusive at the pin mux level. GPIO 2/3 cannot be
+both. Keeping the display means SPI3 is not available.
 
-### Target configuration
+Rather than fight the pin mux (which would require forking
+`reTerminal-dm-base.dts` to move PCF857x onto a bit-banged i2c bus and a
+full Nerves system rebuild), the new plan exploits the fact that the
+TLC5947 is designed for long daisy chains. **One SPI bus can drive all 13
+boards.** One XLAT pulse latches the whole display atomically.
 
-| Column        | SPI bus | spidev     | MOSI | SCLK | XLAT (CE0) | Header pin (XLAT) |
-| ------------- | ------- | ---------- | ---- | ---- | ---------- | ----------------- |
-| input_left    | SPI0    | spidev0.0  | 10   | 11   | GPIO 8     | 24                |
-| input_right   | SPI1    | spidev1.0  | 20   | 21   | GPIO 18    | 12                |
-| hidden_front  | SPI3    | spidev3.0  | 2    | 3    | GPIO 0     | 27                |
-| hidden_rear   | SPI4    | spidev4.0  | 6    | 7    | GPIO 4     | 7                 |
-| output        | SPI5    | spidev5.0  | 14   | 15   | GPIO 12    | 32                |
+This is architecturally simpler than the 5-bus scheme *and* avoids the
+GPIO conflicts. The cost is a physical ribbon-cable path threading SOUT of
+the last chip in one column into SIN of the first chip in the next.
 
-(The column-to-bus assignment is arbitrary until we confirm the silkscreen
-labelling on the power-dist board --- verify physically before locking it in.)
+### Target architecture: single daisy chain
 
-### XLAT handling: two options to evaluate
+One SPI bus, one XLAT, 13 TLC5947 boards in series:
 
-With `spiN-1cs` overlays, the kernel SPI driver owns CE0 and toggles it
-automatically per transfer. TLC5947 latches on the rising edge of XLAT, and
-CS returns HIGH at the end of each SPI transfer --- so in principle the
-kernel-managed CS *is* a valid XLAT. Brendan's Python, however, also manually
-pulses the pin via `RPi.GPIO` after `spi.xfer2`. Two interpretations:
+```
+SPI0.MOSI (GPIO 10) → board 1 SIN → board 2 SIN → ... → board 13 SIN
+SPI0.SCLK (GPIO 11) → shared SCLK to all 13 boards
+SPI0.CE0  (GPIO  8) → shared XLAT to all 13 boards
+```
 
-- **A:** the kernel CS toggle is sufficient and his manual pulse is redundant
-  (or the two are racing, and it happens to work).
-- **B:** the kernel driver leaves CS in some non-toggling state with this
-  overlay and the manual pulse is genuinely required.
+Chain order (fold hidden_front and output into the middle rather than the
+ends to keep cable runs short; final order depends on the physical layout
+of the columns and which way the ribbon cable naturally routes):
 
-First approach to try: **let Circuits.SPI handle XLAT via CS alone**, and
-only add a manual `Circuits.GPIO` pulse if TLC5947 boards fail to latch. This
-matches the simpler `spiN-1cs` + no extra GPIO code path and avoids fighting
-the kernel driver.
+| chain offset | logical column | board count |
+| ------------ | --------------- | ----------- |
+| 0             | input_left     | 2           |
+| 2             | hidden_front   | 3           |
+| 5             | output         | 3           |
+| 8             | hidden_rear    | 3           |
+| 11            | input_right    | 2           |
+
+(Adjust to match the actual ribbon routing once laid out on the structure.)
+
+Per-frame update: build one 312-byte buffer (`13 × 24 bytes`), one
+`Circuits.SPI.transfer/2`, one XLAT pulse. At 10 MHz SPI, ~250 µs per
+frame. At 60 fps frame pacing that's ~1.5% of the budget.
+
+All 13 boards latch simultaneously --- actually better than the 5-bus
+scheme, which risks inter-column tearing if XLATs don't fire in the same
+tick.
+
+### Fallback: two chains on SPI0 + SPI1
+
+If the physical ribbon path for a single 13-board chain is awkward (e.g.,
+the two "input" columns are on opposite sides of the structure and the
+cable run doesn't want to thread through the middle), split into two
+chains:
+
+- **SPI0** (GPIO 10/11/8): upper row
+- **SPI1** (GPIO 20/21/18): lower row
+
+Exact column-to-bus assignment decided by physical layout. Still no
+GPIO 2/3 conflict, still no system rebuild, still native TLC5947
+daisy-chaining.
+
+### What this rules out
+
+- The commit 58b2a2c workaround (shared SPI0 data + dummy-transfer XLAT on
+  spidev1.x) --- revert.
+- Independent per-column latching --- the renderer pushes all columns per
+  frame anyway, so this is fine.
+- `xlat_spi_device`, `xlat_spi`, `xlat_mode` in `NeonPerceptron.Column` ---
+  remove.
 
 ### Resolution plan
 
@@ -69,80 +101,94 @@ the kernel driver.
 Edit `config/rpi4/config.txt`:
 
 - remove `dtoverlay=spi1-3cs`
-- replace with:
-  ```
-  dtoverlay=spi0-1cs
-  dtoverlay=spi1-1cs
-  dtoverlay=spi3-1cs
-  dtoverlay=spi4-1cs
-  dtoverlay=spi5-1cs
-  ```
+- add `dtoverlay=spi0-1cs` (and `dtoverlay=spi1-1cs` only if falling back
+  to 2 chains)
 - confirm `dtparam=spi=on` stays
-- audio/I2S stay disabled (I2S on GPIO 18--21 would collide with SPI1/SPI6)
+- leave `reTerminal-dm-base`, `enable_uart=1`, i2c1/i2c3 overlays untouched
 
-#### 2. Software: revert the 58b2a2c workaround
+#### 2. Software: collapse Column into a single chain driver
 
-Commit 58b2a2c added the shared-SPI0-data-bus + XLAT-via-spidev1.x-dummy-transfer
-hack. That architecture was wrong. Revert the parts of that commit that
-touched `NeonPerceptron.Column` (remove `xlat_spi`, `xlat_spi_device`,
-`xlat_mode`, the `pulse_xlat/2` helpers, the `:update` sync path added for
-transfer ordering). `update_sync/2` can stay if other callers rely on it ---
-check before removing.
+The `NeonPerceptron.Column` GenServer currently models one column = one SPI
+device. Either:
 
-#### 3. Software: column_configs in TestPattern
+- **(a)** rename to `NeonPerceptron.Chain`, parameterise with total board
+  count and a `column_offsets` map (`%{input_left: 0, hidden_front: 2, ...}`).
+  One process, one SPI device, one XLAT. Cleaner.
+- **(b)** keep the `Column` name but have only one instance with
+  `board_count: 13` and an offsets map.
 
-Rewrite `lib/neon_perceptron/builds/test_pattern.ex` `column_configs/0` to
-use the per-column spidev devices from the table above (no `xlat_spi_device`).
-Also re-enable the `Ticker` in `extra_children/0` for the blink test.
+(a) is the honest rename. Do it.
 
-Equivalent rewrite needed in `lib/neon_perceptron/builds/v2.ex` (the
-production build) once TestPattern is verified.
+Remove `xlat_spi`, `xlat_spi_device`, `xlat_mode`, `pulse_xlat/2`, and the
+`:update` sync path from commit 58b2a2c. Check whether `update_sync/2` has
+other callers before removing.
 
-#### 4. Software: optional Circuits.GPIO XLAT path
+#### 3. Software: renderer
 
-Only if option A above fails: add an optional `:xlat_gpio` field to the
-Column config that, when set, opens a `Circuits.GPIO` handle and pulses it
-HIGH then LOW after each SPI transfer. Mirrors Brendan's Python. Don't build
-this speculatively --- only if the simpler path doesn't latch.
+Wherever the renderer currently builds 5 separate per-column buffers,
+concatenate into one 312-byte buffer in chain order using the offsets map.
+One `Chain.update/1` call per frame.
 
-#### 5. Hardware verification on device
+#### 4. Software: builds
 
-1. SSH into `nerves.local` and run `cat /sys/kernel/debug/gpio` (debugfs may
-   need enabling). Confirm none of GPIO 0, 4, 8, 12, 18 are claimed by
-   reTerminal-DM-base or any other active overlay.
-2. Confirm all 5 `/dev/spidev*.0` devices exist after the overlay change.
-3. Run the TestPattern build with the Ticker re-enabled. Expected: each of
-   the 5 positions blinks in a distinct hue.
-4. If any column fails, scope its CS pin (header pin from the table above)
-   while running a transfer loop --- confirm the kernel-managed CS is
-   actually toggling. If it's static, switch to the Circuits.GPIO XLAT path
-   (step 4).
-5. Once all 5 columns blink, restore v2-accurate board counts (2/2/3/3/3 per
-   Build.V2) in TestPattern and re-verify.
-6. Switch the running build to Build.V2 and confirm the actual perceptron
-   visualisation renders across all columns.
+Rewrite `lib/neon_perceptron/builds/test_pattern.ex` and
+`lib/neon_perceptron/builds/v2.ex` to start a single `Chain` child instead
+of five `Column` children. Re-enable the `Ticker` in
+`TestPattern.extra_children/0` for the blink test.
+
+#### 5. Software: XLAT handling
+
+With `spi0-1cs`, the kernel SPI driver owns CE0 and toggles it
+automatically per transfer. TLC5947 latches on the rising edge of XLAT,
+and CS returns HIGH at transfer end --- so the kernel-managed CS should be
+a valid XLAT. Brendan's Python also manually pulses the pin via
+`RPi.GPIO`; may be redundant, may be genuinely required.
+
+First approach: let `Circuits.SPI` handle XLAT via CS alone. If boards
+fail to latch, add an optional `Circuits.GPIO` pulse on GPIO 8 after each
+transfer. Don't build the GPIO path speculatively.
+
+#### 6. Hardware verification on device
+
+1. SSH to `nerves.local` and `cat /sys/kernel/debug/gpio`. Confirm GPIO 8,
+   10, 11 are free / claimed only by the spi0 controller. Confirm the
+   PCF857x / DSI / touch claims on GPIO 2, 3, 6, 13, 27 are intact.
+2. Confirm `/dev/spidev0.0` exists. Confirm the DSI display still comes
+   up. Confirm touch still works.
+3. Run the TestPattern build with Ticker re-enabled. Expected: all 13
+   boards blink in a distinct hue per logical column.
+4. If latching fails, scope GPIO 8 during a transfer loop. If CS toggles
+   correctly but TLC5947s don't latch, add the manual GPIO pulse (step 5
+   fallback).
+5. Once TestPattern blinks cleanly, switch the active build to
+   `Build.V2` and confirm the perceptron visualisation renders correctly
+   across all columns.
 
 ### Deliverables
 
-- [ ] #1 `config/rpi4/config.txt` uses five `spiN-1cs` overlays
-- [ ] #2 `NeonPerceptron.Column` and TestPattern no longer reference
-      `xlat_spi_device` / shared-bus workaround
-- [ ] #3 All 5 columns blink in TestPattern on real hardware
-- [ ] #4 Root cause captured in commit message / task notes
-- [ ] #5 Node-board pin pinout map saved next to `v2.0-output-assignments.pdf`
-      (deferred --- still useful documentation but no longer blocking)
+- [ ] #1 `config/rpi4/config.txt` uses `spi0-1cs` (drop `spi1-3cs`)
+- [ ] #2 `NeonPerceptron.Column` replaced by `NeonPerceptron.Chain`; 58b2a2c
+      workaround reverted
+- [ ] #3 All 13 boards blink in TestPattern on real hardware
+- [ ] #4 `Build.V2` renders correctly across all 5 logical columns
+- [ ] #5 DSI display + Goodix touch still working alongside the SPI chain
 
 ### Notes for the session with the device connected
 
-- The device isn't attached right now. When it is, start with step 5.1
-  (GPIO-ownership check on the current firmware) before making code changes
-  --- quick confirmation that none of the XLAT pins are already claimed.
-- OTA upload path: `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix upload nerves.local`.
-- Brendan's Python uses SPI mode 0, 10 MHz. `Circuits.SPI.open/2` defaults to
-  mode 0; speed defaults to 1 MHz but can go higher. Start at the default
-  and raise if needed.
-- The `spidev0.1 → flashing green` regression noted earlier is moot ---
-  spidev0.1 isn't used in the new scheme.
+- The device isn't attached right now. When it is, start with step 6.1
+  (GPIO-ownership check on the current firmware) before making code
+  changes.
+- OTA upload path:
+  `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix upload nerves.local`.
+- Brendan's Python uses SPI mode 0, 10 MHz. `Circuits.SPI.open/2` defaults
+  to mode 0; speed defaults to 1 MHz. Raise to 10 MHz if the default
+  latches OK and the chain length is fine, otherwise stay at 1--5 MHz.
+- Signal integrity: 13 chips at 10 MHz across ribbon cables should be
+  fine but not guaranteed. If it flakes, drop to 5 MHz --- still ~500 µs
+  per frame, still irrelevant.
+- A single bad solder joint or connector anywhere in the chain kills the
+  whole display. Flip side: walking a single non-zero byte through the
+  chain instantly identifies which chip-position is broken.
 
 ---
 
