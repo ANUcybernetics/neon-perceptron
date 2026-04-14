@@ -143,27 +143,63 @@ nodes.
 When the LED node connects, its `Chain` subscribers automatically receive
 broadcasts from the trainer's `Trainer` process on the UI node.
 
-### LED-side watchdog (optional, deferred)
+### Bench test mode (TestPattern build, LED node standalone)
 
-If the trainer node disappears, `Chain` processes simply stop receiving
-messages and hold their last frame indefinitely. For a public installation this
-may be undesirable.
+The existing `Builds.TestPattern` module is already a self-contained bench test
+for SPI wiring: it has no `trainer_config` (returns `nil`), declares chains
+that mirror V2's wiring exactly, and uses a local `Ticker` GenServer (started
+via `extra_children/0`) that pushes frames to chains directly via
+`Chain.update/2`, bypassing PubSub.
 
-A future enhancement: each `Chain` tracks the timestamp of the last received
-frame. If no frame for N seconds (configurable, default 5s), render a slow
-breathing pulse or test pattern to indicate "system alive, no data".
+This composes cleanly with the role architecture. A second firmware variant
+for the LED board can be built with `build: Builds.TestPattern, role:
+:led_driver`: the LED board then boots, starts its chains + the local Ticker,
+and drives test patterns without needing the trainer node or any
+clustering. Ideal for powering up the LED board alone on the bench and
+verifying every chip lights up.
 
-This is **out of scope for the initial split**. We can add it once the split
+Two LED-board firmware variants, selectable at build time:
+
+| Variant          | Build              | Role           | Purpose                                |
+|------------------|--------------------|----------------|----------------------------------------|
+| LED production   | `Builds.V2`        | `:led_driver`  | Clustered; receives from trainer node. |
+| LED bench test   | `Builds.TestPattern` | `:led_driver` | Standalone; local Ticker drives chains.|
+
+Switching between them is a firmware reflash (`mix upload nerves-leds.local`),
+not a runtime toggle. For installation use we always run LED production; for
+bench or debug use we flash LED bench test.
+
+Implementation note: `application.ex` `build_children/2` must still call
+`extra_children/0` on the `:led_driver` role (TestPattern's Ticker lives
+there). On the `:trainer` role, `extra_children/0` should be skipped for
+builds like TestPattern whose extras depend on local chains --- or TestPattern
+simply isn't a valid build for the trainer node. We document it as
+LED-node-only.
+
+### Trainer-offline fallback (deferred)
+
+If the trainer node disappears during production, `Chain` processes stop
+receiving messages and hold their last frame indefinitely. For a public
+installation this may be undesirable.
+
+A future enhancement unifies this with the bench-test mechanism: each `Chain`
+tracks the timestamp of the last received frame. If no frame for N seconds
+(configurable, default 5s), the LED node falls back to rendering
+TestPattern-style frames locally, signalling "system alive, no trainer". When
+the trainer returns, the next broadcast pre-empts the fallback.
+
+This is **out of scope for the initial split**. We add it once the split
 itself is proven.
 
 ## Firmware & deployment
 
-Two firmware artifacts from one repo:
+Three firmware artifacts from one repo (two production, one bench):
 
-| Firmware | MIX_TARGET | Nerves system    | Role         | Host name             |
-|----------|-----------|------------------|--------------|-----------------------|
-| UI       | rpi4      | reterminal_dm    | `:trainer`   | `nerves-ui.local`     |
-| LED      | rpi4      | nerves_system_rpi4 | `:led_driver` | `nerves-leds.local` |
+| Firmware       | MIX_TARGET | Nerves system      | Build               | Role          | Host name           |
+|----------------|-----------|--------------------|---------------------|---------------|---------------------|
+| UI             | rpi4      | reterminal_dm      | `Builds.V2`         | `:trainer`    | `nerves-ui.local`   |
+| LED production | rpi4      | nerves_system_rpi4 | `Builds.V2`         | `:led_driver` | `nerves-leds.local` |
+| LED bench      | rpi4      | nerves_system_rpi4 | `Builds.TestPattern` | `:led_driver` | `nerves-leds.local` |
 
 Build commands (suggested mix aliases or scripts):
 
