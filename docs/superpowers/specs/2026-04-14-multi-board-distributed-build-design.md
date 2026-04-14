@@ -201,25 +201,65 @@ Three firmware artifacts from one repo (two production, one bench):
 | LED production | rpi4      | nerves_system_rpi4 | `Builds.V2`         | `:led_driver` | `nerves-leds.local` |
 | LED bench      | rpi4      | nerves_system_rpi4 | `Builds.TestPattern` | `:led_driver` | `nerves-leds.local` |
 
-Build commands (suggested mix aliases or scripts):
+### Mise tasks (top-level dev interface)
 
-```sh
-# UI firmware (reTerminal DM)
-NERVES_HOSTNAME=nerves-ui NERVES_ROLE=trainer \
-  mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix firmware
+All build, upload, and SD-card flashing goes through mise TOML tasks defined
+in `mise.toml` so that environment variables are never typed on the command
+line. Task naming convention: `firmware:<variant>`, `upload:<variant>`,
+`burn:<variant>`.
 
-# LED firmware (Pi 4B)
-NERVES_HOSTNAME=nerves-leds NERVES_ROLE=led_driver \
-  mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix firmware
-```
+| Task                    | What it does                                    |
+|-------------------------|-------------------------------------------------|
+| `firmware:ui`           | Build UI firmware (trainer, V2)                 |
+| `firmware:leds`         | Build LED production firmware (led_driver, V2)  |
+| `firmware:leds-bench`   | Build LED bench firmware (led_driver, TestPattern) |
+| `upload:ui`             | Build if needed, then OTA to `nerves-ui.local`  |
+| `upload:leds`           | Build if needed, then OTA to `nerves-leds.local` |
+| `upload:leds-bench`     | Build if needed, then OTA bench to `nerves-leds.local` |
+| `burn:leds`             | Build if needed, then write to SD card (uses `$DEVICE`) |
+| `burn:leds-bench`       | Build if needed, then write bench to SD card    |
 
-`mix.exs` selects the Nerves system based on an env var (e.g.
-`NERVES_TARGET_VARIANT=ui|led`), since both firmwares use `MIX_TARGET=rpi4`
-but different system deps.
+`burn:ui` is intentionally absent: the reTerminal DM bootstraps via `rpiboot`
+on the eMMC (see CLAUDE.md), not a user-accessible SD card.
 
-OTA updates work as today: `mix upload nerves-ui.local` and
-`mix upload nerves-leds.local`. The shared switch's WAN uplink ensures both
+Each task sets:
+- `MIX_TARGET=rpi4`, `MIX_ENV=prod`
+- `NERVES_ROLE` in `{trainer, led_driver}`
+- `NERVES_HOSTNAME` in `{nerves-ui, nerves-leds}`
+- `NEON_PERCEPTRON_BUILD` in `{v2, test_pattern}`
+- `NERVES_TARGET_VARIANT` in `{ui, leds}` (selects Nerves system in mix.exs)
+
+`upload:*` and `burn:*` tasks declare `depends = ["firmware:<variant>"]` so
+mise rebuilds if source has changed.
+
+### Env-var-driven configuration (new plumbing)
+
+The task design assumes four env vars are respected during firmware build:
+
+| Env var                  | Consumes                      | Currently                              |
+|--------------------------|-------------------------------|----------------------------------------|
+| `NEON_PERCEPTRON_BUILD`  | `:build` Application env      | Hard-coded in `config/target.exs:18`.  |
+| `NERVES_ROLE`            | `:role` Application env       | Unset. Defaulted in `application.ex:14`. |
+| `NERVES_HOSTNAME`        | mDNS hostname (erlinit)       | Defaults to `nerves-<serial>.local`.   |
+| `NERVES_TARGET_VARIANT`  | Nerves system dep in `mix.exs` | Not yet needed (single-system build).  |
+
+The implementation plan introduces:
+- A read of `NEON_PERCEPTRON_BUILD` in `config/target.exs` mapping `"v2"` →
+  `Builds.V2`, `"test_pattern"` → `Builds.TestPattern`, etc.
+- A read of `NERVES_ROLE` in `config/target.exs` setting `:role`.
+- Hostname configuration via `erlinit` (exact mechanism TBD in plan).
+- A conditional `nerves_system_*` dep in `mix.exs` keyed on
+  `NERVES_TARGET_VARIANT`.
+
+OTA updates retain the familiar `mix upload <host>` semantics, now wrapped by
+`mise run upload:<variant>`. The shared switch's WAN uplink ensures both
 hosts are reachable from a developer laptop on the same network.
+
+**Firmware compatibility note**: the UI and LED boards use different Nerves
+systems (`reterminal_dm` vs `nerves_system_rpi4`). The firmware images are not
+interchangeable --- `fwup` refuses an incompatible image, so there's no
+bricking risk, but each mise task binds its hostname to its build variant to
+prevent the mistake.
 
 ## Failure modes
 
