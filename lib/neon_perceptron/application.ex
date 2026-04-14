@@ -86,8 +86,10 @@ defmodule NeonPerceptron.Application do
       end
     end
 
-    defp platform_children do
-      [NeonPerceptron.Kiosk.Supervisor]
+    if Mix.target() == :reterminal_dm do
+      defp platform_children, do: [NeonPerceptron.Kiosk.Supervisor]
+    else
+      defp platform_children, do: []
     end
   end
 end

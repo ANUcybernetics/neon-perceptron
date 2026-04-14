@@ -6,3 +6,41 @@ pnpm = "latest"
 
 [env]
 # MIX_TARGET = "rpi4"
+
+# Firmware tasks. See docs/superpowers/specs/2026-04-14-multi-board-distributed-build-design.md
+# for the overall architecture. MIX_TARGET selects the hardware:
+#   reterminal_dm — reTerminal DM (CM4 with DSI/touch), runs trainer + UI
+#   rpi4          — stock Raspberry Pi 4B, runs the LED driver chains
+#
+# Role (trainer / led_driver) and build (V2 / TestPattern) env-var plumbing
+# is not wired up yet — firmware:leds-bench currently picks TestPattern
+# via the default in config/target.exs. firmware:leds (V2 on rpi4) will be
+# added once that plumbing lands.
+
+[tasks."firmware:ui"]
+description = "Build UI firmware (reTerminal DM, V2 build)"
+env = { MIX_TARGET = "reterminal_dm", MIX_ENV = "prod" }
+run = "mix firmware"
+
+[tasks."firmware:leds-bench"]
+description = "Build LED bench firmware (stock Pi 4B, TestPattern build)"
+env = { MIX_TARGET = "rpi4", MIX_ENV = "prod" }
+run = "mix firmware"
+
+[tasks."burn:leds-bench"]
+description = "Burn LED bench firmware to SD card. Usage: DEVICE=/dev/sdX mise run burn:leds-bench"
+depends = ["firmware:leds-bench"]
+env = { MIX_TARGET = "rpi4", MIX_ENV = "prod" }
+run = "mix firmware.burn --device $DEVICE"
+
+[tasks."upload:ui"]
+description = "OTA upload UI firmware. Usage: HOST=nerves-ui.local mise run upload:ui"
+depends = ["firmware:ui"]
+env = { MIX_TARGET = "reterminal_dm", MIX_ENV = "prod" }
+run = "mix upload $HOST"
+
+[tasks."upload:leds-bench"]
+description = "OTA upload LED bench firmware. Usage: HOST=nerves-leds.local mise run upload:leds-bench"
+depends = ["firmware:leds-bench"]
+env = { MIX_TARGET = "rpi4", MIX_ENV = "prod" }
+run = "mix upload $HOST"

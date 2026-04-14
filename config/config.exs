@@ -12,8 +12,16 @@ Application.start(:nerves_bootstrap)
 # https://hexdocs.pm/nerves/advanced-configuration.html for details.
 
 config :nerves, :firmware,
-  rootfs_overlay: "rootfs_overlay",
-  fwup_conf: "config/rpi4/fwup.conf"
+  rootfs_overlay: "rootfs_overlay"
+
+case Mix.target() do
+  :reterminal_dm ->
+    config :nerves, :firmware, fwup_conf: "config/reterminal_dm/fwup.conf"
+
+  _ ->
+    # :host and :rpi4 use the Nerves system's default fwup.conf.
+    :ok
+end
 
 # Set the SOURCE_DATE_EPOCH date for reproducible builds.
 # See https://reproducible-builds.org/docs/source-date-epoch/ for more information

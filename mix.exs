@@ -3,7 +3,7 @@ defmodule NeonPerceptron.MixProject do
 
   @app :neon_perceptron
   @version "0.1.0"
-  @all_targets [:rpi4]
+  @all_targets [:reterminal_dm, :rpi4]
 
   def project do
     [
@@ -81,8 +81,12 @@ defmodule NeonPerceptron.MixProject do
       # bumps to Nerves systems. Since these include Linux kernel and Erlang
       # version updates, please review their release notes in case
       # changes to your application are needed.
-      {:reterminal_dm, "~> 2.0", github: "ANUcybernetics/reterminal_dm", tag: "v2.2.0",
-       runtime: false, targets: :rpi4}
+      {:reterminal_dm, "~> 2.0",
+       github: "ANUcybernetics/reterminal_dm",
+       tag: "v2.2.0",
+       runtime: false,
+       targets: :reterminal_dm},
+      {:nerves_system_rpi4, "~> 2.0", runtime: false, targets: :rpi4}
     ]
   end
 

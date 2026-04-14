@@ -10,13 +10,30 @@ Run the tests with `mix test`. Tests run on the `:host` target by default.
 
 ## Firmware deployment
 
-Build firmware with `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix firmware`.
+The project builds firmware for two different boards, each with its own
+`MIX_TARGET`:
 
-For OTA updates to a running device: `mise exec -- env MIX_TARGET=rpi4 MIX_ENV=prod mix upload nerves.local`. This uses the RPi4 tryboot A/B scheme
-with automatic rollback --- no physical access needed.
+- `reterminal_dm` --- reTerminal DM (CM4 with DSI/touch), runs trainer + UI
+- `rpi4` --- stock Raspberry Pi 4B, runs LED driver chains (multi-board setup)
 
-For a full flash (e.g. after switching Nerves systems or partition layouts), use
-`rpiboot` to expose the eMMC and then `mix firmware.burn --device /dev/sdX`.
+Prefer the mise tasks in `mise.toml`:
+
+- `mise run firmware:ui` --- build reTerminal DM firmware
+- `mise run firmware:leds-bench` --- build stock rpi4 bench firmware (TestPattern)
+- `mise run upload:ui HOST=nerves-ui.local` --- OTA push to UI board
+- `mise run upload:leds-bench HOST=nerves-leds.local` --- OTA push to LED board
+- `DEVICE=/dev/sdX mise run burn:leds-bench` --- first-time flash LED board's SD card
+
+Raw equivalent: `mise exec -- env MIX_TARGET=reterminal_dm MIX_ENV=prod mix firmware`
+or `MIX_TARGET=rpi4` for the LED board.
+
+OTA uses the RPi4 tryboot A/B scheme with automatic rollback --- no physical
+access needed.
+
+For a full flash of the reTerminal DM (e.g. after switching Nerves systems or
+partition layouts), use `rpiboot` to expose the eMMC and then
+`mix firmware.burn --device /dev/sdX`. The stock Pi 4B boots from SD card, so
+`burn:leds-bench` handles it directly.
 
 ## Custom Nerves system (reterminal_dm)
 
