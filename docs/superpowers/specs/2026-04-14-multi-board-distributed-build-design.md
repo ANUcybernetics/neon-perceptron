@@ -193,13 +193,33 @@ itself is proven.
 
 ## Firmware & deployment
 
+### Two `MIX_TARGET` values, one per hardware type
+
+The canonical Nerves way to handle multiple boards in one repo is one
+`MIX_TARGET` per hardware type. `mix.exs`'s `targets:` option, `config/<target>.exs`
+imports, and `config/<target>/` directories all key off `MIX_TARGET`. Doing this
+keeps everything idiomatic and avoids inventing a parallel "target variant"
+env var.
+
+| `MIX_TARGET`    | Hardware              | Nerves system             | Config path              |
+|-----------------|-----------------------|---------------------------|--------------------------|
+| `reterminal_dm` | reTerminal DM (CM4)   | `reterminal_dm` fork      | `config/reterminal_dm/`  |
+| `rpi4`          | Stock Raspberry Pi 4B | `nerves_system_rpi4` (stock) | `config/rpi4/`        |
+
+`MIX_TARGET` encodes hardware only. Role (trainer / led_driver) and build
+(V2 / TestPattern) are orthogonal and controlled via env vars at firmware
+build time --- the same Pi 4B can be the production LED driver or the bench
+test target without a different Nerves system.
+
+### Firmware artifacts
+
 Three firmware artifacts from one repo (two production, one bench):
 
-| Firmware       | MIX_TARGET | Nerves system      | Build               | Role          | Host name           |
-|----------------|-----------|--------------------|---------------------|---------------|---------------------|
-| UI             | rpi4      | reterminal_dm      | `Builds.V2`         | `:trainer`    | `nerves-ui.local`   |
-| LED production | rpi4      | nerves_system_rpi4 | `Builds.V2`         | `:led_driver` | `nerves-leds.local` |
-| LED bench      | rpi4      | nerves_system_rpi4 | `Builds.TestPattern` | `:led_driver` | `nerves-leds.local` |
+| Firmware       | `MIX_TARGET`     | Build                | Role          | Host name             |
+|----------------|-------------------|----------------------|---------------|-----------------------|
+| UI             | `reterminal_dm`   | `Builds.V2`          | `:trainer`    | `nerves-ui.local`     |
+| LED production | `rpi4`            | `Builds.V2`          | `:led_driver` | `nerves-leds.local`   |
+| LED bench      | `rpi4`            | `Builds.TestPattern` | `:led_driver` | `nerves-leds.local`   |
 
 ### Mise tasks (top-level dev interface)
 
@@ -223,33 +243,35 @@ line. Task naming convention: `firmware:<variant>`, `upload:<variant>`,
 on the eMMC (see CLAUDE.md), not a user-accessible SD card.
 
 Each task sets:
-- `MIX_TARGET=rpi4`, `MIX_ENV=prod`
+- `MIX_TARGET` in `{reterminal_dm, rpi4}`
+- `MIX_ENV=prod`
 - `NERVES_ROLE` in `{trainer, led_driver}`
 - `NERVES_HOSTNAME` in `{nerves-ui, nerves-leds}`
 - `NEON_PERCEPTRON_BUILD` in `{v2, test_pattern}`
-- `NERVES_TARGET_VARIANT` in `{ui, leds}` (selects Nerves system in mix.exs)
 
 `upload:*` and `burn:*` tasks declare `depends = ["firmware:<variant>"]` so
 mise rebuilds if source has changed.
 
 ### Env-var-driven configuration (new plumbing)
 
-The task design assumes four env vars are respected during firmware build:
+The task design assumes three env vars are respected during firmware build
+(beyond the standard `MIX_TARGET`/`MIX_ENV`):
 
 | Env var                  | Consumes                      | Currently                              |
 |--------------------------|-------------------------------|----------------------------------------|
 | `NEON_PERCEPTRON_BUILD`  | `:build` Application env      | Hard-coded in `config/target.exs:18`.  |
 | `NERVES_ROLE`            | `:role` Application env       | Unset. Defaulted in `application.ex:14`. |
 | `NERVES_HOSTNAME`        | mDNS hostname (erlinit)       | Defaults to `nerves-<serial>.local`.   |
-| `NERVES_TARGET_VARIANT`  | Nerves system dep in `mix.exs` | Not yet needed (single-system build).  |
 
 The implementation plan introduces:
 - A read of `NEON_PERCEPTRON_BUILD` in `config/target.exs` mapping `"v2"` →
   `Builds.V2`, `"test_pattern"` → `Builds.TestPattern`, etc.
 - A read of `NERVES_ROLE` in `config/target.exs` setting `:role`.
 - Hostname configuration via `erlinit` (exact mechanism TBD in plan).
-- A conditional `nerves_system_*` dep in `mix.exs` keyed on
-  `NERVES_TARGET_VARIANT`.
+
+Nerves system selection is handled natively by `MIX_TARGET` via
+`targets: :reterminal_dm` and `targets: :rpi4` in `mix.exs`'s deps list ---
+no env var indirection required.
 
 OTA updates retain the familiar `mix upload <host>` semantics, now wrapped by
 `mise run upload:<variant>`. The shared switch's WAN uplink ensures both
