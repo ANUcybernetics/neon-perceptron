@@ -119,4 +119,63 @@ defmodule NeonPerceptron.Diag do
   defp blank_frame_for_count(n) do
     Enum.flat_map(0..(n - 1), fn _ -> Board.blank() end)
   end
+
+  @doc """
+  Terminate any supervised child whose id ends in `.Ticker` (e.g.
+  `NeonPerceptron.Builds.TestPattern.Ticker`) so bench diagnostics aren't
+  overwritten 30 times per second.
+
+  Returns `:ok` if a ticker was terminated, `:not_running` otherwise.
+  """
+  @spec pause_ticker() :: :ok | :not_running
+  def pause_ticker do
+    case find_ticker() do
+      nil ->
+        :not_running
+
+      {sup, id} ->
+        case Supervisor.terminate_child(sup, id) do
+          :ok -> :ok
+          {:error, :not_found} -> :not_running
+        end
+    end
+  end
+
+  @doc """
+  Restart the ticker child previously paused by `pause_ticker/0`.
+
+  Returns `:ok` on success, `:not_running` if no ticker child is known.
+  """
+  @spec resume_ticker() :: :ok | :not_running
+  def resume_ticker do
+    case find_ticker() do
+      nil ->
+        :not_running
+
+      {sup, id} ->
+        case Supervisor.restart_child(sup, id) do
+          {:ok, _pid} -> :ok
+          {:ok, _pid, _info} -> :ok
+          {:error, :running} -> :ok
+          {:error, :already_present} -> :ok
+          {:error, _other} -> :not_running
+        end
+    end
+  end
+
+  defp find_ticker do
+    case Process.whereis(NeonPerceptron.Supervisor) do
+      nil ->
+        nil
+
+      sup ->
+        sup
+        |> Supervisor.which_children()
+        |> Enum.find_value(fn {id, _, _, _} ->
+          if is_atom(id) and String.ends_with?(Atom.to_string(id), ".Ticker") do
+            {sup, id}
+          end
+        end)
+    end
+  end
 end
