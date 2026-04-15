@@ -81,7 +81,7 @@ defmodule NeonPerceptron.Diag do
     n = chip_count(chain_id)
 
     frame =
-      Enum.flat_map(0..(n - 1), fn _chip ->
+      Enum.flat_map(0..(n - 1)//1, fn _chip ->
         Board.blank() |> List.replace_at(channel, value)
       end)
 
@@ -105,7 +105,7 @@ defmodule NeonPerceptron.Diag do
     end
 
     frame =
-      Enum.flat_map(0..(n - 1), fn i ->
+      Enum.flat_map(0..(n - 1)//1, fn i ->
         if i == chip_index,
           do: List.duplicate(value, @channels_per_board),
           else: Board.blank()
@@ -117,7 +117,7 @@ defmodule NeonPerceptron.Diag do
   defp blank_frame(chain_id), do: blank_frame_for_count(chip_count(chain_id))
 
   defp blank_frame_for_count(n) do
-    Enum.flat_map(0..(n - 1), fn _ -> Board.blank() end)
+    Enum.flat_map(0..(n - 1)//1, fn _ -> Board.blank() end)
   end
 
   @doc """
