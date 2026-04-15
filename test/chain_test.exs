@@ -123,5 +123,21 @@ defmodule NeonPerceptron.ChainTest do
       values = List.duplicate(0.25, 48)
       assert :ok = Chain.push_raw(:push_raw_ok, values)
     end
+
+    test "returns {:error, :bad_length} for wrong-sized input" do
+      config = %{
+        id: :push_raw_bad,
+        spi_device: "spidev99.99",
+        boards: [{"input", 0}, {"input", 1}],
+        render_fn: fn _state, _spec -> NeonPerceptron.Board.blank() end,
+        render_frame_fn: nil
+      }
+
+      start_supervised!({Chain, config}, id: :push_raw_bad)
+
+      # 2 boards = 48 channels expected; send 47.
+      assert {:error, :bad_length} =
+               Chain.push_raw(:push_raw_bad, List.duplicate(0.0, 47))
+    end
   end
 end
