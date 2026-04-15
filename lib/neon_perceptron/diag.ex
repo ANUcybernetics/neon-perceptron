@@ -69,6 +69,12 @@ defmodule NeonPerceptron.Diag do
     raise ArgumentError, "channel must be in 0..23 (got #{inspect(channel)})"
   end
 
+  def light(_chain_id, chip_index, _channel, _value)
+      when not (is_integer(chip_index) and chip_index >= 0) do
+    raise ArgumentError,
+          "chip_index must be a non-negative integer (got #{inspect(chip_index)})"
+  end
+
   @doc """
   Light `channel` on *every* chip in the chain to `value` (default 1.0).
   Every other channel is zero. Useful for checking channel consistency

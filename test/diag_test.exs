@@ -41,5 +41,11 @@ defmodule NeonPerceptron.DiagTest do
         Diag.light(:diag_test, 0, 24, 1.0)
       end
     end
+
+    test "light with negative chip_index raises ArgumentError" do
+      assert_raise ArgumentError, fn ->
+        Diag.light(:diag_test, -1, 5, 1.0)
+      end
+    end
   end
 end
