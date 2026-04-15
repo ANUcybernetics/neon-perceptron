@@ -106,10 +106,37 @@ defmodule NeonPerceptron.Chain do
     GenServer.call(via(chain_id), {:update, network_state})
   end
 
+  @doc """
+  Push an arbitrary list of channel values (flat `24 * chip_count` floats)
+  directly to SPI, bypassing `render_fn`/`render_frame_fn`.
+
+  Diagnostic only. Use `Diag` helpers instead of calling this directly.
+
+  Returns `:ok` on success, `{:error, :bad_length}` if the list length
+  does not equal `24 * chip_count` for the target chain.
+  """
+  @spec push_raw(atom(), [float()]) :: :ok | {:error, :bad_length}
+  def push_raw(chain_id, channel_values) when is_list(channel_values) do
+    GenServer.call(via(chain_id), {:push_raw, channel_values})
+  end
+
   @impl true
   def handle_call({:update, network_state}, _from, state) do
     render_and_send(network_state, state)
     {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:push_raw, channel_values}, _from, state) do
+    expected = length(state.boards) * 24
+
+    if length(channel_values) == expected do
+      data = channel_values |> Enum.reverse() |> Board.encode()
+      spi_transfer(state.spi, state.mode, data)
+      {:reply, :ok, state}
+    else
+      {:reply, {:error, :bad_length}, state}
+    end
   end
 
   @impl true

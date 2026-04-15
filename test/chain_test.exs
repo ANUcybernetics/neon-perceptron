@@ -107,4 +107,21 @@ defmodule NeonPerceptron.ChainTest do
       assert Process.alive?(pid)
     end
   end
+
+  describe "push_raw/2" do
+    test "accepts a correctly-sized channel list and returns :ok" do
+      config = %{
+        id: :push_raw_ok,
+        spi_device: "spidev99.99",
+        boards: [{"input", 0}, {"input", 1}],
+        render_fn: fn _state, _spec -> NeonPerceptron.Board.blank() end,
+        render_frame_fn: nil
+      }
+
+      start_supervised!({Chain, config}, id: :push_raw_ok)
+
+      values = List.duplicate(0.25, 48)
+      assert :ok = Chain.push_raw(:push_raw_ok, values)
+    end
+  end
 end
