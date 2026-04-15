@@ -74,41 +74,56 @@ defmodule NeonPerceptron.Builds.V2 do
     - 6 on the output column (1 *front* + 1 *back* for each of 3 output
       nodes).
 
-  The specific TLC5947 channel each physical big LED is wired to is not
-  uniform across boards and is being characterised in TASK-17. Do not assume
-  channels 18--23 on a given board correspond to big-LED pads --- on some
-  hidden boards a channel in 18--23 drives a noodle instead.
+  The specific TLC5947 channel each physical LED is wired to is not uniform
+  across boards and is being characterised in TASK-17. Do not assume channels
+  18--23 on a given board correspond to big-LED pads --- on input boards at
+  least one channel in 18--23 has been observed driving a noodle instead.
 
   ## LED hardware per board (TLC5947, 24 channels)
 
-  ### Big LEDs (channels 18--23)
+  ### Big LEDs
 
-  Each board has a front and rear "big LED" driven by three PWM channels each.
-  The physical LED type differs by layer:
+  The "big LED" pads on each PCB live at channels 18--20 ("front" pad triple)
+  and 21--23 ("rear" pad triple) in the canonical `Board` layout. Population
+  varies by role:
 
-  - **Input layer boards**: monochrome LEDs --- all three RGB pads are wired to
-    the same LED element. Setting R=G=B=brightness is sufficient; the hue
-    doesn't matter. Brightness encodes the input activation (0.0--1.0).
-  - **Hidden and output layer boards**: proper RGB LEDs. Hue encodes the node's
-    activation value, at full saturation and value.
+  - **Input boards**: one monochrome white LED on the *back* of the
+    installation (3 RGB pads tied to one LED element), plus one RGB LED on
+    the *front*. Brightness on the mono encodes input activation (0.0--1.0).
+    The intent for the front RGB is TBD.
+  - **Hidden boards**: one RGB big LED facing the gap between the two
+    physical hidden columns (back of column 1 or front of column 2,
+    depending on which copy of the node). Hue encodes activation.
+  - **Output boards**: one RGB big LED on the *front* and one on the *back*.
+    Hue encodes activation.
 
-  ### LED noodles (channels 0--17, 9 pairs)
+  Specific TLC5947 channels driving each populated big LED are TBD per board
+  --- see TASK-17.
 
-  Each board has 18 individual PWM outputs driving 9 pairs of LED "noodles"
-  (flexible LED wires). Each pair represents one incoming edge in the neural
-  network graph. The two noodles in a pair are different physical colours,
-  forming a diverging colour palette:
+  ### LED noodles
 
-  - **Channel 2*i** (even): "positive" noodle --- lit when the edge
-    contribution (weight * source activation) is positive.
-  - **Channel 2*i+1** (odd): "negative" noodle --- lit when the edge
-    contribution is negative.
-  - Brightness = magnitude of the contribution, clamped to [0, 1].
+  Each noodle is a flexible LED wire connecting two boards in adjacent
+  layers. The PWM signal for a noodle comes from the *non-hidden* end of
+  the wire --- the hidden-side end is a voltage reference only. So:
 
-  Pair-to-edge mapping:
-  - Hidden nodes (4 incoming edges from input): pairs 0--3 used, pairs 4--8 dark.
-  - Output nodes (3 incoming edges from hidden): pairs 0--2 used, pairs 3--8 dark.
-  - Input nodes (no incoming edges): all noodle pairs dark.
+  - **Input-to-hidden noodles** are driven by the input boards. Each input
+    board drives 3 outgoing-edge noodle pairs (one pair per hidden node),
+    totalling 6 noodles per input board.
+  - **Hidden-to-output noodles** are driven by the output boards. Each output
+    board drives 3 incoming-edge noodle pairs (one pair per hidden node),
+    totalling 6 noodles per output board.
+  - **Hidden boards drive no noodles** --- noodles terminate on hidden boards
+    only for voltage reference.
+
+  Each noodle pair is colour-coded for sign of the edge contribution:
+
+  - **Positive noodle**: lit when the edge contribution
+    (weight × source activation) is positive.
+  - **Negative noodle**: lit when the contribution is negative.
+  - Brightness = `min(abs(contribution), 1.0)`.
+
+  Specific TLC5947 channels driving each noodle pair on input/output boards
+  are TBD --- see TASK-17.
   """
 
   alias NeonPerceptron.{Board, NetworkState}

@@ -14,13 +14,22 @@ defmodule NeonPerceptron.Board do
   `Builds.V2` moduledoc uses "back" (input-side) and "front" (output-side) for
   the installation, and those two senses do not match up automatically.
 
-  Per-board population is non-uniform. Input boards wire only 6 of 18 noodle
-  positions and use a monochrome element in place of one RGB big-LED triple.
-  Hidden and output boards have their own population patterns. The specific
-  TLC5947 channel each physical LED is wired to varies by board, and may not
-  match this PCB-pad table --- for example, on some hidden boards a channel
-  in 18--23 drives a noodle rather than a big-LED pad. See TASK-17 for the
-  ongoing per-board channel characterisation.
+  Per-board population is non-uniform, and the channel-to-physical-LED wiring
+  on a given board does not always match this PCB-pad table. Notably:
+
+  - **Input boards** drive their outgoing-edge noodles (the noodles connecting
+    to the first hidden column) plus one monochrome and one RGB big LED. At
+    least one channel in 18--23 on an input board has been observed driving a
+    noodle rather than a big-LED pad.
+  - **Hidden boards** do not drive any noodles --- noodles physically
+    terminate on hidden boards but only for voltage reference, not PWM. Their
+    channels 0--17 have no observable function. The single RGB big LED on a
+    hidden board is wired to channels TBD.
+  - **Output boards** drive their incoming-edge noodles (from the second
+    hidden column) plus front and rear RGB big LEDs.
+
+  See TASK-17 and `Builds.V2` for the ongoing per-board channel
+  characterisation.
   """
 
   @channels_per_board 24
