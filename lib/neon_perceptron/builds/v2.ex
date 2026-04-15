@@ -49,6 +49,36 @@ defmodule NeonPerceptron.Builds.V2 do
   The wiring is purely a property of `chain_configs/0` --- edit that
   single function to re-cable the installation.
 
+  ## Installation nomenclature
+
+  "Back" and "front" refer to *installation-wide* orientation:
+
+  - **Back** = input-side of the installation (closer to the input layer).
+  - **Front** = output-side of the installation (closer to the output layer).
+
+  This is distinct from `Board`'s `@front_*` / `@rear_*` channel constants,
+  which name *chip-local* PCB pad triples. A big-LED pad labelled "front_red"
+  in `Board` is just "channel 20 of the TLC5947" --- its physical location
+  in the installation depends on how the board is oriented when mounted.
+
+  ## LED inventory
+
+  18 big LEDs plus noodle wires on the TLC5947 chain:
+
+  - **4 monochrome big LEDs** --- one on the *back* of each of the 4 input
+    boards.
+  - **14 RGB big LEDs**:
+    - 4 on the *front* of each input board (1 per input).
+    - 2 on the *back* of the first hidden column.
+    - 2 on the *front* of the second hidden column.
+    - 6 on the output column (1 *front* + 1 *back* for each of 3 output
+      nodes).
+
+  The specific TLC5947 channel each physical big LED is wired to is not
+  uniform across boards and is being characterised in TASK-17. Do not assume
+  channels 18--23 on a given board correspond to big-LED pads --- on some
+  hidden boards a channel in 18--23 drives a noodle instead.
+
   ## LED hardware per board (TLC5947, 24 channels)
 
   ### Big LEDs (channels 18--23)

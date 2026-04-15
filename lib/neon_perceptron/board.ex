@@ -2,11 +2,25 @@ defmodule NeonPerceptron.Board do
   @moduledoc """
   TLC5947 board encoding and channel constants.
 
-  Each node board has one TLC5947 providing 24 PWM channels (12-bit each):
+  Each node board has one TLC5947 providing 24 PWM channels (12-bit each). The
+  channel-to-PCB-pad layout on the designed board is:
 
-  - Channels 0--17: individual LEDs
-  - Channels 18--20: "big LED" front (blue, green, red)
-  - Channels 21--23: "big LED" rear (blue, green, red)
+  - Channels 0--17: noodle pad positions (9 pairs)
+  - Channels 18--20: "front" big-LED pad triple (blue, green, red)
+  - Channels 21--23: "rear" big-LED pad triple (blue, green, red)
+
+  `@front_*` / `@rear_*` are *chip-local* names for the two big-LED pad triples
+  on the PCB. They are NOT the installation-wide orientation terms --- the
+  `Builds.V2` moduledoc uses "back" (input-side) and "front" (output-side) for
+  the installation, and those two senses do not match up automatically.
+
+  Per-board population is non-uniform. Input boards wire only 6 of 18 noodle
+  positions and use a monochrome element in place of one RGB big-LED triple.
+  Hidden and output boards have their own population patterns. The specific
+  TLC5947 channel each physical LED is wired to varies by board, and may not
+  match this PCB-pad table --- for example, on some hidden boards a channel
+  in 18--23 drives a noodle rather than a big-LED pad. See TASK-17 for the
+  ongoing per-board channel characterisation.
   """
 
   @channels_per_board 24
