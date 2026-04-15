@@ -18,8 +18,13 @@ case Mix.target() do
   :reterminal_dm ->
     config :nerves, :firmware, fwup_conf: "config/reterminal_dm/fwup.conf"
 
+  :rpi4 ->
+    # Stock nerves_system_rpi4 hardcodes config.txt to its system default,
+    # and does not bundle the spi0-1cs / spi1-1cs overlays we need to drive
+    # TLC5947 chains. Override both by using our own fwup.conf.
+    config :nerves, :firmware, fwup_conf: "config/rpi4/fwup.conf"
+
   _ ->
-    # :host and :rpi4 use the Nerves system's default fwup.conf.
     :ok
 end
 
