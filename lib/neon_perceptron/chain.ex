@@ -140,8 +140,13 @@ defmodule NeonPerceptron.Chain do
     Enum.flat_map(boards, fn _board_spec -> Board.blank() end)
   end
 
+  # TLC5947 datasheet max is 30 MHz; 25 MHz leaves headroom and keeps each
+  # 2-chip frame transfer under ~20 us (vs ~58 us at 10 MHz), reducing the
+  # visible brightness disturbance per refresh.
+  @spi_speed_hz 25_000_000
+
   defp open_spi(spi_device) do
-    case Circuits.SPI.open(spi_device) do
+    case Circuits.SPI.open(spi_device, speed_hz: @spi_speed_hz) do
       {:ok, spi} ->
         {spi, :hardware}
 
