@@ -4,7 +4,7 @@ title: SPI1 bus not driving TLC5947 boards
 status: To Do
 assignee: []
 created_date: '2026-04-10 04:25'
-updated_date: '2026-04-13 09:40'
+updated_date: '2026-04-16 04:09'
 labels:
   - bug
   - hardware
@@ -14,7 +14,6 @@ dependencies: []
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-
 ### Status (2026-04-13)
 
 Brendan verified on the bench that all 5 SPI ports on the power distribution
@@ -234,7 +233,6 @@ re-attempts the shared-bus approach.
 
 "Route SPI1 columns through SPI0 data bus with per-column XLAT" ---
 architecturally wrong. Revert per the resolution plan above.
-
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
@@ -242,3 +240,22 @@ architecturally wrong. Revert per the resolution plan above.
 - [ ] #1 All 5 SPI columns drive TLC5947 boards correctly (test pattern blinks on all)
 - [ ] #2 Root cause identified and documented
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+### 2026-04-16 bench findings
+
+The :main chain is physically on SPI3 (CN4 connector, GPIO 2/3/0), not SPI1
+as previously assumed. This was discovered by reading the power distribution
+board schematic (v1.2) and Brendan's test script (LAT_PIN assignments per
+SPI bus). The distribution board is a passive parallel breakout --- all 5
+connectors carry the same GPIO signals, and the node board PCB determines
+which SPI bus it listens to.
+
+SPI1 (GPIO 20/21 for MOSI/SCLK) isn't even carried by the 32-pin connectors
+(those pins are on header positions 35--40, beyond the connector's 32 pins).
+
+The "SPI1 not driving boards" symptom was never an SPI1 problem --- it was
+the wrong bus entirely. TASK-19 tracks getting SPI3 working properly.
+<!-- SECTION:NOTES:END -->
