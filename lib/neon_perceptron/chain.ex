@@ -25,6 +25,14 @@ defmodule NeonPerceptron.Chain do
     `(NetworkState.t()) -> [float()]` returning all `N*24` values for
     the whole chain at once. Used by V1 where the pin mapping doesn't
     follow one-chip-per-node.
+  - `:xlat_gpio` (optional) --- GPIO label (e.g. `"GPIO18"`) to pulse
+    manually as XLAT after each SPI transfer. Use this for SPI buses
+    whose kernel CS doesn't toggle reliably at end-of-transfer (notably
+    BCM2711 *aux* SPI, i.e. SPI1/SPI2 on RPi 4). The corresponding
+    overlay must be configured to NOT claim this pin --- e.g.
+    `dtoverlay=spi1-1cs,cs0_pin=27` frees GPIO 18 for userspace control.
+    When `nil`, the kernel's CS pulse on `:spi_device` is the XLAT (works
+    for SPI0).
 
   Exactly one of `:render_fn` or `:render_frame_fn` must be provided.
   """
@@ -41,7 +49,8 @@ defmodule NeonPerceptron.Chain do
           spi_device: String.t(),
           boards: [board_spec()],
           render_fn: (NeonPerceptron.NetworkState.t(), board_spec() -> [float()]) | nil,
-          render_frame_fn: (NeonPerceptron.NetworkState.t() -> [float()]) | nil
+          render_frame_fn: (NeonPerceptron.NetworkState.t() -> [float()]) | nil,
+          xlat_gpio: String.t() | nil
         }
 
   def child_spec(config) do
@@ -69,11 +78,13 @@ defmodule NeonPerceptron.Chain do
     end
 
     {spi, mode} = open_spi(config.spi_device)
+    xlat = open_xlat(config[:xlat_gpio])
 
     state = %{
       id: config.id,
       spi: spi,
       mode: mode,
+      xlat: xlat,
       boards: config[:boards] || [],
       render_fn: config[:render_fn],
       render_frame_fn: config[:render_frame_fn]
@@ -132,7 +143,7 @@ defmodule NeonPerceptron.Chain do
 
     if length(channel_values) == expected do
       data = channel_values |> Enum.reverse() |> Board.encode()
-      spi_transfer(state.spi, state.mode, data)
+      spi_transfer(state.spi, state.mode, state.xlat, data)
       {:reply, :ok, state}
     else
       {:reply, {:error, :bad_length}, state}
@@ -148,7 +159,7 @@ defmodule NeonPerceptron.Chain do
   defp render_and_send(network_state, state) do
     channel_values = render_all_boards(network_state, state)
     data = channel_values |> Enum.reverse() |> Board.encode()
-    spi_transfer(state.spi, state.mode, data)
+    spi_transfer(state.spi, state.mode, state.xlat, data)
   end
 
   defp render_all_boards(network_state, %{render_frame_fn: render_frame_fn})
@@ -186,8 +197,35 @@ defmodule NeonPerceptron.Chain do
     end
   end
 
-  defp spi_transfer(spi, :hardware, data), do: Circuits.SPI.transfer!(spi, data)
-  defp spi_transfer(_spi, :simulation, _data), do: :ok
+  defp open_xlat(nil), do: nil
+
+  defp open_xlat(gpio_label) do
+    case Circuits.GPIO.open(gpio_label, :output, initial_value: 0) do
+      {:ok, gpio} ->
+        gpio
+
+      {:error, reason} ->
+        Logger.warning(
+          "XLAT GPIO #{gpio_label} unavailable (#{inspect(reason)}), chain running without manual XLAT"
+        )
+
+        nil
+    end
+  end
+
+  defp spi_transfer(spi, :hardware, xlat, data) do
+    Circuits.SPI.transfer!(spi, data)
+    pulse_xlat(xlat)
+  end
+
+  defp spi_transfer(_spi, :simulation, _xlat, _data), do: :ok
+
+  defp pulse_xlat(nil), do: :ok
+
+  defp pulse_xlat(gpio) do
+    Circuits.GPIO.write(gpio, 1)
+    Circuits.GPIO.write(gpio, 0)
+  end
 
   defp pubsub_available? do
     !!Process.whereis(NeonPerceptron.PubSub)
