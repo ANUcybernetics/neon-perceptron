@@ -40,6 +40,20 @@ defmodule NeonPerceptron.Diag do
   end
 
   @doc """
+  Blank every channel on every chip across *every running chain*. Chain
+  membership is discovered from `NeonPerceptron.ChainRegistry`, so this
+  follows whatever build is live (V1, V2, TestPattern, etc.).
+
+  Returns a list of `{chain_id, result}` pairs for visibility.
+  """
+  @spec dark_all() :: [{atom(), :ok | {:error, :bad_length}}]
+  def dark_all do
+    for chain_id <- chain_ids() do
+      {chain_id, dark(chain_id)}
+    end
+  end
+
+  @doc """
   Light one `channel` on one `chip_index` of `chain_id` to `value`
   (default 1.0). Every other channel on every other chip is zero.
   """
@@ -73,6 +87,28 @@ defmodule NeonPerceptron.Diag do
       when not (is_integer(chip_index) and chip_index >= 0) do
     raise ArgumentError,
           "chip_index must be a non-negative integer (got #{inspect(chip_index)})"
+  end
+
+  @doc """
+  Light *every* channel on *every* chip across *every running chain* to
+  `value` (default 1.0). Useful as a "is the entire installation alive?"
+  smoke check, and as the on-counterpart to `dark_all/0`.
+
+  Returns a list of `{chain_id, result}` pairs for visibility.
+
+  Disambiguation by arity:
+
+  - `light_all/0`, `light_all/1` — flood every chain with `value`.
+  - `light_all/2`, `light_all/3` — light one `channel` on every chip of
+    one `chain_id`.
+  """
+  @spec light_all(float()) :: [{atom(), :ok | {:error, :bad_length}}]
+  def light_all(value \\ 1.0) when is_number(value) do
+    for chain_id <- chain_ids() do
+      n = chip_count(chain_id)
+      frame = List.duplicate(value * 1.0, n * @channels_per_board)
+      {chain_id, Chain.push_raw(chain_id, frame)}
+    end
   end
 
   @doc """
@@ -124,6 +160,10 @@ defmodule NeonPerceptron.Diag do
 
   defp blank_frame_for_count(n) do
     Enum.flat_map(0..(n - 1)//1, fn _ -> Board.blank() end)
+  end
+
+  defp chain_ids do
+    Registry.select(NeonPerceptron.ChainRegistry, [{{:"$1", :_, :_}, [], [:"$1"]}])
   end
 
   @doc """

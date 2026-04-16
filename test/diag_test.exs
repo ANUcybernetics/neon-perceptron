@@ -30,6 +30,20 @@ defmodule NeonPerceptron.DiagTest do
       assert :ok = Diag.light_chip(:diag_test, 2, 1.0)
     end
 
+    test "dark_all/0 hits every registered chain" do
+      results = Diag.dark_all()
+      assert {:diag_test, :ok} in results
+      assert Enum.all?(results, fn {_id, r} -> r == :ok end)
+    end
+
+    test "light_all/0 and light_all/1 flood every registered chain" do
+      assert results = Diag.light_all()
+      assert {:diag_test, :ok} in results
+
+      assert results2 = Diag.light_all(0.25)
+      assert {:diag_test, :ok} in results2
+    end
+
     test "light with out-of-range chip_index raises" do
       assert_raise ArgumentError, fn ->
         Diag.light(:diag_test, 99, 18, 1.0)
