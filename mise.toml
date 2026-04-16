@@ -40,7 +40,24 @@ env = { MIX_TARGET = "reterminal_dm", MIX_ENV = "prod" }
 run = "mix upload $HOST"
 
 [tasks."upload:leds-bench"]
-description = "OTA upload LED bench firmware. Usage: HOST=nerves-leds.local mise run upload:leds-bench"
+description = "OTA upload LED bench firmware. Usage: HOST=nerves.local mise run upload:leds-bench"
 depends = ["firmware:leds-bench"]
 env = { MIX_TARGET = "rpi4", MIX_ENV = "prod" }
+run = "mix upload $HOST"
+
+[tasks."firmware:leds-rpi5"]
+description = "Build LED firmware (Raspberry Pi 5, TestPattern build)"
+env = { MIX_TARGET = "rpi5", MIX_ENV = "prod" }
+run = "mix firmware"
+
+[tasks."burn:leds-rpi5"]
+description = "Burn LED firmware to SD card. Usage: DEVICE=/dev/sdX mise run burn:leds-rpi5"
+depends = ["firmware:leds-rpi5"]
+env = { MIX_TARGET = "rpi5", MIX_ENV = "prod" }
+run = "mix firmware.burn --device $DEVICE"
+
+[tasks."upload:leds-rpi5"]
+description = "OTA upload LED firmware. Usage: HOST=nerves.local mise run upload:leds-rpi5"
+depends = ["firmware:leds-rpi5"]
+env = { MIX_TARGET = "rpi5", MIX_ENV = "prod" }
 run = "mix upload $HOST"
