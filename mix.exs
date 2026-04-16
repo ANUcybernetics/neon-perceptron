@@ -3,7 +3,7 @@ defmodule NeonPerceptron.MixProject do
 
   @app :neon_perceptron
   @version "0.1.0"
-  @all_targets [:reterminal_dm, :rpi4]
+  @all_targets [:reterminal_dm, :rpi4, :rpi5]
 
   def project do
     [
@@ -86,7 +86,8 @@ defmodule NeonPerceptron.MixProject do
        tag: "v2.2.0",
        runtime: false,
        targets: :reterminal_dm},
-      {:nerves_system_rpi4, "~> 2.0", runtime: false, targets: :rpi4}
+      {:nerves_system_rpi4, "~> 2.0", runtime: false, targets: :rpi4},
+      {:nerves_system_rpi5, "~> 2.0", runtime: false, targets: :rpi5}
     ]
   end
 

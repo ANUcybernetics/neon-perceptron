@@ -24,6 +24,9 @@ case Mix.target() do
     # TLC5947 chains. Override both by using our own fwup.conf.
     config :nerves, :firmware, fwup_conf: "config/rpi4/fwup.conf"
 
+  :rpi5 ->
+    config :nerves, :firmware, fwup_conf: "config/rpi5/fwup.conf"
+
   _ ->
     :ok
 end

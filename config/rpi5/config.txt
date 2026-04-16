@@ -1,0 +1,27 @@
+# Raspberry Pi 5 config.txt for the headless LED driver board.
+#
+# Pi 5's RP1 chip has uniform SPI controllers (unlike the BCM2711 aux SPI),
+# so both SPI0 and SPI1 toggle CS reliably at end-of-transfer --- no
+# userspace XLAT workaround needed.
+
+arm_64bit=1
+start_file=start4.elf
+fixup_file=fixup4.dat
+
+enable_uart=1
+disable_splash=1
+disable_overscan=1
+arm_boost=1
+
+dtparam=spi=on
+
+# SPI0 (GPIO 10/11/8) for :input_left chain, SPI3 (GPIO 2/3/0) for :main chain.
+# SPI3 uses the CN4 connector on the power distribution board (silk-screened SPI3).
+dtoverlay=spi0-1cs
+dtoverlay=spi3-1cs
+
+dtoverlay=dwc2
+dtoverlay=ramoops
+
+# Audio disabled to avoid pin conflicts with SPI1
+dtparam=audio=off
