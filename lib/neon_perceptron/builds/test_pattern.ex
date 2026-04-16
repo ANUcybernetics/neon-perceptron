@@ -27,15 +27,16 @@ defmodule NeonPerceptron.Builds.TestPattern do
   """
   def chain_configs do
     [
-      chain(:input_left, "spidev1.0", 2),
-      chain(:main, "spidev0.0", 11)
+      chain(:input_left, "spidev0.0", 2, nil),
+      chain(:main, "spidev3.0", 11, nil)
     ]
   end
 
-  defp chain(id, spi_device, board_count) do
+  defp chain(id, spi_device, board_count, xlat_gpio) do
     %{
       id: id,
       spi_device: spi_device,
+      xlat_gpio: xlat_gpio,
       boards: List.duplicate({"_", 0}, board_count),
       render_fn: nil,
       render_frame_fn: fn _state -> render_frame(board_count) end

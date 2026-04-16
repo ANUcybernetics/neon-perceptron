@@ -35,10 +35,10 @@ defmodule NeonPerceptron.Builds.V2Test do
       end
     end
 
-    test "main chain is on spidev0.0 and input_left on spidev1.0" do
+    test "main chain is on spidev3.0 and input_left on spidev0.0" do
       by_id = V2.chain_configs() |> Map.new(&{&1.id, &1})
-      assert by_id[:input_left].spi_device == "spidev1.0"
-      assert by_id[:main].spi_device == "spidev0.0"
+      assert by_id[:input_left].spi_device == "spidev0.0"
+      assert by_id[:main].spi_device == "spidev3.0"
     end
 
     test "every board entry references a valid layer and node index" do

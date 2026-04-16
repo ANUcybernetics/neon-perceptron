@@ -39,12 +39,12 @@ defmodule NeonPerceptron.Builds.V2 do
   13 TLC5947 boards across 2 SPI chains. The reTerminal DM carrier claims
   GPIO 2/3 (SPI3 alt function) for i2c1/PCF857x (DSI reset, LCD power),
   so we can't use 5 dedicated SPI buses. Instead, we daisy-chain
-  everything onto SPI0 except one input column which lives on SPI1.
+  everything onto SPI3 except one input column which lives on SPI0.
 
   | spidev    | Chain ID      | Chips | Contents                               |
   |-----------|---------------|-------|----------------------------------------|
-  | spidev1.0 | `:input_left` | 2     | input[0], input[2]                     |
-  | spidev0.0 | `:main`       | 11    | input_right + hidden (front+rear) + output |
+  | spidev0.0 | `:input_left` | 2     | input[0], input[2]                     |
+  | spidev3.0 | `:main`       | 11    | input_right + hidden (front+rear) + output |
 
   The wiring is purely a property of `chain_configs/0` --- edit that
   single function to re-cable the installation.
@@ -174,7 +174,7 @@ defmodule NeonPerceptron.Builds.V2 do
     [
       %{
         id: :input_left,
-        spi_device: "spidev1.0",
+        spi_device: "spidev0.0",
         boards: [
           {"input", 0},
           {"input", 2}
@@ -184,7 +184,7 @@ defmodule NeonPerceptron.Builds.V2 do
       },
       %{
         id: :main,
-        spi_device: "spidev0.0",
+        spi_device: "spidev3.0",
         boards: [
           {"input", 1},
           {"input", 3},

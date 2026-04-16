@@ -15,10 +15,13 @@ disable_splash=1
 # /dev/spidev0.1 on the default pins (GPIO 7-11).
 dtparam=spi=on
 
-# Per-chain 1-CS overlays: SPI0 CE0 (GPIO 8) and SPI1 CE0 (GPIO 18)
-# drive XLAT for their respective TLC5947 daisy chains. See TASK-16.
+# SPI0 (GPIO 10/11/8) for :input_left chain.
 dtoverlay=spi0-1cs
-dtoverlay=spi1-1cs
 
-# Audio and i2s disabled to free GPIO 18-21 for SPI1.
+# SPI3 (GPIO 2/3/0) for :main chain. Uses the CN4 connector on the power
+# distribution board (silk-screened "SPI3"). SPI3 is a BCM2711 aux SPI
+# controller --- CE0 on GPIO 0 may need manual XLAT via Chain.xlat_gpio.
+dtoverlay=spi3-1cs
+
+# Audio disabled to avoid GPIO pin conflicts with SPI buses.
 dtparam=audio=off
