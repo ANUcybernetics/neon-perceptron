@@ -11,7 +11,7 @@ unknown entries.
 
 ## Installation overview
 
-4→2→3 neural network (4 inputs → 2 hidden tanh → 3 softmax outputs).
+4→2→3 neural network (4 inputs → 2 hidden gelu → 3 softmax outputs).
 Each logical node is visualised by one or two physical TLC5947 boards
 driving big LEDs and/or noodles.
 
