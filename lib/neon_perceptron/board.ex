@@ -5,31 +5,30 @@ defmodule NeonPerceptron.Board do
   Each node board has one TLC5947 providing 24 PWM channels (12-bit each). The
   channel-to-PCB-pad layout on the designed board is:
 
-  - Channels 0--17: noodle pad positions (9 pairs)
-  - Channels 18--20: "front" big-LED pad triple (blue, green, red)
-  - Channels 21--23: "rear" big-LED pad triple (blue, green, red)
+  - Channels 0--17: 18 individual noodle pads (one channel per pad, not
+    pre-paired --- a "noodle pair" is any two pads wired to the two ends
+    of one blue/red noodle wire-pair)
+  - Channels 18--20: "front" big-LED pad triple (B=18, G=19, R=20)
+  - Channels 21--23: "rear" big-LED pad triple (B=21, G=22, R=23)
 
-  `@front_*` / `@rear_*` are *chip-local* names for the two big-LED pad triples
-  on the PCB. They are NOT the installation-wide orientation terms --- the
-  `Builds.V2` moduledoc uses "back" (input-side) and "front" (output-side) for
-  the installation, and those two senses do not match up automatically.
+  `@front_*` / `@rear_*` are *chip-local* names for the two big-LED pad
+  triples on opposite physical faces of the PCB --- they describe silicon,
+  not installation orientation. Build-level code (e.g. `Builds.V2`) is
+  responsible for mapping these triples to installation-wide directions
+  (upstream/downstream) and to per-role LED population (RGB vs mono vs
+  unpopulated).
 
-  Per-board population is non-uniform, and the channel-to-physical-LED wiring
-  on a given board does not always match this PCB-pad table. Notably:
+  Per-build population is non-uniform. For V2 specifically:
 
-  - **Input boards** drive their outgoing-edge noodles (the noodles connecting
-    to the first hidden column) plus one monochrome and one RGB big LED. At
-    least one channel in 18--23 on an input board has been observed driving a
-    noodle rather than a big-LED pad.
-  - **Hidden boards** do not drive any noodles --- noodles physically
-    terminate on hidden boards but only for voltage reference, not PWM. Their
-    channels 0--17 have no observable function. The single RGB big LED on a
-    hidden board is wired to channels TBD.
-  - **Output boards** drive their incoming-edge noodles (from the second
-    hidden column) plus front and rear RGB big LEDs.
+  - **Input boards** populate noodle pads `(0,1)` and `(9,10)` (2 pairs),
+    plus an RGB LED on one triple and a mono LED on the other.
+  - **Hidden boards** drive no noodle pads (noodles physically terminate
+    here only for voltage reference, not PWM). One RGB big LED on the
+    outward face of the board's column.
+  - **Output boards** populate noodle pads `(5,6)` and `(14,15)` (2 pairs),
+    plus RGB LEDs on both triples.
 
-  See TASK-17 and `Builds.V2` for the ongoing per-board channel
-  characterisation.
+  See `docs/build_v2_hardware.md` for the full per-role channel map.
   """
 
   @channels_per_board 24

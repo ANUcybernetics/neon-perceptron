@@ -51,9 +51,62 @@ defmodule NeonPerceptron.Builds.V2Test do
       %{layers: layers, sizes: sizes} = V2.topology()
 
       for %{boards: boards} <- V2.chain_configs(),
-          {layer, index} <- boards do
+          %{node: {layer, index}} <- boards do
         assert layer in layers, "unknown layer #{inspect(layer)}"
         assert index in 0..(sizes[layer] - 1), "index #{index} out of range for #{layer}"
+      end
+    end
+
+    test "main chain follows logical-top-to-bottom convention" do
+      by_id = V2.chain_configs() |> Map.new(&{&1.id, &1})
+      nodes = Enum.map(by_id[:main].boards, & &1.node)
+
+      assert nodes == [
+               {"input", 1},
+               {"input", 3},
+               {"hidden_0", 1},
+               {"hidden_0", 0},
+               {"hidden_0", 0},
+               {"hidden_0", 1},
+               {"output", 2},
+               {"output", 1},
+               {"output", 0}
+             ]
+    end
+
+    test "hidden boards have no noodles" do
+      for %{boards: boards} <- V2.chain_configs(),
+          %{node: {"hidden_0", _}, noodles: noodles} <- boards do
+        assert noodles == []
+      end
+    end
+
+    test "input boards have two noodle pairs targeting hidden_0[0] and hidden_0[1]" do
+      for %{boards: boards} <- V2.chain_configs(),
+          %{node: {"input", _}, noodles: noodles} <- boards do
+        assert length(noodles) == 2
+        targets = Enum.map(noodles, & &1.target) |> Enum.sort()
+        assert targets == [{"hidden_0", 0}, {"hidden_0", 1}]
+      end
+    end
+
+    test "output boards have two noodle pairs targeting hidden_0[0] and hidden_0[1]" do
+      for %{boards: boards} <- V2.chain_configs(),
+          %{node: {"output", _}, noodles: noodles} <- boards do
+        assert length(noodles) == 2
+        targets = Enum.map(noodles, & &1.target) |> Enum.sort()
+        assert targets == [{"hidden_0", 0}, {"hidden_0", 1}]
+      end
+    end
+
+    test "every noodle's blue_ch and red_ch are within its pads tuple" do
+      for %{boards: boards} <- V2.chain_configs(),
+          %{noodles: noodles} <- boards,
+          noodle <- noodles do
+        {a, b} = noodle.pads
+        assert noodle.blue_ch in [a, b]
+        assert noodle.red_ch in [a, b]
+        assert noodle.blue_ch != noodle.red_ch
       end
     end
   end
@@ -102,30 +155,82 @@ defmodule NeonPerceptron.Builds.V2Test do
   end
 
   describe "render_node/2" do
-    test "returns 24 channel values" do
-      state = NetworkState.null(V2.topology())
-      channels = V2.render_node(state, {"input", 0})
-      assert length(channels) == 24
+    defp input_spec(index) do
+      %{
+        node: {"input", index},
+        noodles: [
+          %{pads: {0, 1}, target: {"hidden_0", 1}, blue_ch: 1, red_ch: 0},
+          %{pads: {9, 10}, target: {"hidden_0", 0}, blue_ch: 9, red_ch: 10}
+        ]
+      }
     end
 
-    test "big LEDs reflect activation brightness" do
+    defp hidden_spec(index), do: %{node: {"hidden_0", index}, noodles: []}
+
+    defp output_spec(index) do
+      %{
+        node: {"output", index},
+        noodles: [
+          %{pads: {5, 6}, target: {"hidden_0", 0}, blue_ch: 6, red_ch: 5},
+          %{pads: {14, 15}, target: {"hidden_0", 1}, blue_ch: 14, red_ch: 15}
+        ]
+      }
+    end
+
+    test "returns 24 channel values for each layer" do
+      state = NetworkState.null(V2.topology())
+      assert length(V2.render_node(state, input_spec(0))) == 24
+      assert length(V2.render_node(state, hidden_spec(0))) == 24
+      assert length(V2.render_node(state, output_spec(0))) == 24
+    end
+
+    test "input big LEDs reflect activation brightness on all six channels" do
       state = %NetworkState{
         activations: %{
           "input" => [0.8, 0.0, 0.0, 0.0],
-          "hidden_0" => [0, 0, 0],
-          "output" => [0, 0, 0]
+          "hidden_0" => [0.0, 0.0],
+          "output" => [0.0, 0.0, 0.0]
         },
         weights: %{
-          "dense_0" => List.duplicate(0.0, 12),
-          "dense_1" => List.duplicate(0.0, 9)
+          "dense_0" => List.duplicate(0.0, 4 * 2),
+          "dense_1" => List.duplicate(0.0, 2 * 3)
         },
         topology: V2.topology()
       }
 
-      channels = V2.render_node(state, {"input", 0})
-      assert Enum.at(channels, 18) == 0.8
-      assert Enum.at(channels, 19) == 0.8
-      assert Enum.at(channels, 20) == 0.8
+      channels = V2.render_node(state, input_spec(0))
+      for ch <- 18..23, do: assert(Enum.at(channels, ch) == 0.8)
+    end
+
+    test "input noodles light positive contribution on blue channel, zero red" do
+      # input[0] activation = 1.0, outgoing weights to hidden = [0.5, -0.25]
+      # hidden_0[0] noodle at pads (9,10): contrib = +0.5 → blue=ch 9, red=ch 10 = 0
+      # hidden_0[1] noodle at pads (0,1): contrib = -0.25 → red=ch 0 = 0.25, blue=ch 1 = 0
+      state = %NetworkState{
+        activations: %{
+          "input" => [1.0, 0.0, 0.0, 0.0],
+          "hidden_0" => [0.0, 0.0],
+          "output" => [0.0, 0.0, 0.0]
+        },
+        weights: %{
+          # kernel layout: [w_i0h0, w_i0h1, w_i1h0, w_i1h1, ...]
+          "dense_0" => [0.5, -0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+          "dense_1" => List.duplicate(0.0, 2 * 3)
+        },
+        topology: V2.topology()
+      }
+
+      channels = V2.render_node(state, input_spec(0))
+      assert Enum.at(channels, 9) == 0.5
+      assert Enum.at(channels, 10) == 0.0
+      assert Enum.at(channels, 0) == 0.25
+      assert Enum.at(channels, 1) == 0.0
+    end
+
+    test "hidden boards never drive noodle channels 0..17" do
+      state = NetworkState.null(V2.topology())
+      channels = V2.render_node(state, hidden_spec(0))
+      for ch <- 0..17, do: assert(Enum.at(channels, ch) == 0.0)
     end
   end
 end

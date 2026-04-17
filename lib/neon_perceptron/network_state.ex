@@ -134,4 +134,20 @@ defmodule NeonPerceptron.NetworkState do
       |> Enum.map(fn {w, a} -> {w, a, w * a} end)
     end
   end
+
+  @doc """
+  Get this node's weighted contributions to each node in the next layer.
+
+  Returns a list of `{weight, activation, contribution}` tuples (one per
+  next-layer node) where contribution = weight * this_activation. The
+  mirror of `incoming_contributions/3`, useful for driving display on
+  the source end of an edge (e.g. input-board noodles).
+  """
+  @spec outgoing_contributions(t(), String.t(), non_neg_integer()) ::
+          [{float(), float(), float()}]
+  def outgoing_contributions(%__MODULE__{} = state, layer, node_index) do
+    weights = outgoing_weights(state, layer, node_index)
+    activation = activation_for_node(state, layer, node_index)
+    Enum.map(weights, fn w -> {w, activation, w * activation} end)
+  end
 end

@@ -11,119 +11,19 @@ defmodule NeonPerceptron.Builds.V2 do
 
   - **4 inputs**: 2x2 grid read row-major [top-left, top-right, bottom-left,
     bottom-right], values 0.0--1.0 (continuous, driven by touch)
-  - **2 hidden** (gelu, no bias)
+  - **2 hidden** (tanh, no bias)
   - **3 outputs** (softmax): probabilities summing to 1
     - output[0] = diagonal (⟍ or ⟋)
     - output[1] = row (top or bottom)
     - output[2] = column (left or right)
   - **Loss**: categorical cross-entropy
 
-  ## Training data
+  ## Hardware reference
 
-  Only the 6 clean patterns are used for training. The 10 ambiguous patterns
-  (all off, all on, single corners, three-of-four) are deliberately excluded
-  so that the network's response to them is emergent --- viewers can explore
-  how the trained network generalises to inputs it hasn't seen.
-
-  | Pattern          | Inputs       | Label    |
-  |------------------|-------------|----------|
-  | left diagonal ⟍  | [1,0,0,1]   | diagonal |
-  | right diagonal ⟋ | [0,1,1,0]   | diagonal |
-  | top row          | [1,1,0,0]   | row      |
-  | bottom row       | [0,0,1,1]   | row      |
-  | left column      | [1,0,1,0]   | column   |
-  | right column     | [0,1,0,1]   | column   |
-
-  ## Physical layout
-
-  13 TLC5947 boards across 2 SPI chains. The reTerminal DM carrier claims
-  GPIO 2/3 (SPI3 alt function) for i2c1/PCF857x (DSI reset, LCD power),
-  so we can't use 5 dedicated SPI buses. Instead, we daisy-chain
-  everything onto SPI3 except one input column which lives on SPI0.
-
-  | spidev    | Chain ID      | Chips | Contents                               |
-  |-----------|---------------|-------|----------------------------------------|
-  | spidev0.0 | `:input_left` | 2     | input[0], input[2]                     |
-  | spidev1.0 | `:main`       | 9     | input_right + hidden (front+rear) + output |
-
-  The wiring is purely a property of `chain_configs/0` --- edit that
-  single function to re-cable the installation.
-
-  ## Installation nomenclature
-
-  "Back" and "front" refer to *installation-wide* orientation:
-
-  - **Back** = input-side of the installation (closer to the input layer).
-  - **Front** = output-side of the installation (closer to the output layer).
-
-  This is distinct from `Board`'s `@front_*` / `@rear_*` channel constants,
-  which name *chip-local* PCB pad triples. A big-LED pad labelled "front_red"
-  in `Board` is just "channel 20 of the TLC5947" --- its physical location
-  in the installation depends on how the board is oriented when mounted.
-
-  ## LED inventory
-
-  18 big LEDs plus noodle wires on the TLC5947 chain:
-
-  - **4 monochrome big LEDs** --- one on the *back* of each of the 4 input
-    boards.
-  - **14 RGB big LEDs**:
-    - 4 on the *front* of each input board (1 per input).
-    - 2 on the *back* of the first hidden column.
-    - 2 on the *front* of the second hidden column.
-    - 6 on the output column (1 *front* + 1 *back* for each of 3 output
-      nodes).
-
-  The specific TLC5947 channel each physical LED is wired to is not uniform
-  across boards and is being characterised in TASK-17. Do not assume channels
-  18--23 on a given board correspond to big-LED pads --- on input boards at
-  least one channel in 18--23 has been observed driving a noodle instead.
-
-  ## LED hardware per board (TLC5947, 24 channels)
-
-  ### Big LEDs
-
-  The "big LED" pads on each PCB live at channels 18--20 ("front" pad triple)
-  and 21--23 ("rear" pad triple) in the canonical `Board` layout. Population
-  varies by role:
-
-  - **Input boards**: one monochrome white LED on the *back* of the
-    installation (3 RGB pads tied to one LED element), plus one RGB LED on
-    the *front*. Brightness on the mono encodes input activation (0.0--1.0).
-    The intent for the front RGB is TBD.
-  - **Hidden boards**: one RGB big LED facing the gap between the two
-    physical hidden columns (back of column 1 or front of column 2,
-    depending on which copy of the node). Hue encodes activation.
-  - **Output boards**: one RGB big LED on the *front* and one on the *back*.
-    Hue encodes activation.
-
-  Specific TLC5947 channels driving each populated big LED are TBD per board
-  --- see TASK-17.
-
-  ### LED noodles
-
-  Each noodle is a flexible LED wire connecting two boards in adjacent
-  layers. The PWM signal for a noodle comes from the *non-hidden* end of
-  the wire --- the hidden-side end is a voltage reference only. So:
-
-  - **Input-to-hidden noodles** are driven by the input boards. Each input
-    board drives 3 outgoing-edge noodle pairs (one pair per hidden node),
-    totalling 6 noodles per input board.
-  - **Hidden-to-output noodles** are driven by the output boards. Each output
-    board drives 3 incoming-edge noodle pairs (one pair per hidden node),
-    totalling 6 noodles per output board.
-  - **Hidden boards drive no noodles** --- noodles terminate on hidden boards
-    only for voltage reference.
-
-  Each noodle pair is colour-coded for sign of the edge contribution:
-
-  - **Positive noodle**: lit when the edge contribution
-    (weight × source activation) is positive.
-  - **Negative noodle**: lit when the contribution is negative.
-  - Brightness = `min(abs(contribution), 1.0)`.
-
-  Specific TLC5947 channels driving each noodle pair on input/output boards
-  are TBD --- see TASK-17.
+  The authoritative description of the physical installation --- chain
+  layout, per-role TLC5947 channel map, noodle routing, and polarity
+  table --- lives in `docs/build_v2_hardware.md`. This module's
+  `chain_configs/0` is the machine-readable mirror of that document.
   """
 
   alias NeonPerceptron.{Board, NetworkState}
@@ -152,36 +52,65 @@ defmodule NeonPerceptron.Builds.V2 do
     }
   end
 
+  # Every input board populates the same two pad-pairs with the same
+  # best-guess polarity (per bench data on :input_left chip 0). The
+  # targets are identical on every input board too: pads (0,1) go to
+  # hidden_0[1], pads (9,10) go to hidden_0[0]. Noodles from chain-0
+  # chips physically land on col 1; chain-1 chips land on col 2, but
+  # that's a property of the physical wiring, not the per-chip config.
+  defp input_noodles do
+    [
+      %{pads: {0, 1}, target: {"hidden_0", 1}, blue_ch: 1, red_ch: 0},
+      %{pads: {9, 10}, target: {"hidden_0", 0}, blue_ch: 9, red_ch: 10}
+    ]
+  end
+
+  # All three output boards populate the same two pad-pairs. Per-chip
+  # polarity is best-guess for now --- bench-verify via
+  # `Diag.noodles_all(:main, :blue)` and swap blue_ch/red_ch in any
+  # pair that lights up red instead of blue.
+  defp output_noodles do
+    [
+      %{pads: {5, 6}, target: {"hidden_0", 0}, blue_ch: 6, red_ch: 5},
+      %{pads: {14, 15}, target: {"hidden_0", 1}, blue_ch: 14, red_ch: 15}
+    ]
+  end
+
   @doc """
   Chain configurations.
 
-  Each entry describes one SPI chain: the `spi_device`, and an ordered
-  list of chips (`boards`) from the MOSI-side of the chain to the far
-  end. Each chip entry is `{layer, node_index}` --- the logical network
-  node that chip visualises. Repeating a node means "another physical
-  chip for the same node" (e.g. the front and rear big LEDs on the
-  hidden layer).
+  Each `:boards` entry is a map describing a single physical chip:
 
-  To re-cable, just edit this function. No other code depends on the
-  wiring layout.
+      %{
+        node: {layer, index},     # logical node this chip visualises
+        noodles: [                # populated noodle pairs on this chip
+          %{
+            pads:    {ch_a, ch_b},   # the two TLC5947 channels for this pair
+            target:  {layer, index}, # other end of the edge (hidden-side in V2)
+            blue_ch: non_neg_integer, # channel driving the blue (pos) wire
+            red_ch:  non_neg_integer  # channel driving the red (neg) wire
+          },
+          ...
+        ]
+      }
 
-  Requires `dtoverlay=spi0-1cs,cs0_pin=26` and
-  `dtoverlay=spi1-1cs,cs0_pin=25` in `config/rpi4/config.txt`. Both chains
-  use manual XLAT (kernel CE on Pi 4 doesn't reliably latch TLC5947).
+  Board ordering within a chain is MOSI-side → chain-end. The `:main`
+  chain follows the "logical node index ascends physically top-to-bottom"
+  convention, so e.g. chip 6 is `output[2]` (bottom of output column)
+  and chip 8 is `output[0]` (top). See `docs/build_v2_hardware.md` for
+  the full physical layout and channel map.
   """
   def chain_configs do
-    render = &render_node/2
-
     [
       %{
         id: :input_left,
         spi_device: "spidev0.0",
         xlat_gpio: "GPIO8",
         boards: [
-          {"input", 0},
-          {"input", 2}
+          %{node: {"input", 0}, noodles: input_noodles()},
+          %{node: {"input", 2}, noodles: input_noodles()}
         ],
-        render_fn: render,
+        render_fn: &render_node/2,
         render_frame_fn: nil
       },
       %{
@@ -189,36 +118,33 @@ defmodule NeonPerceptron.Builds.V2 do
         spi_device: "spidev1.0",
         xlat_gpio: "GPIO18",
         boards: [
-          {"input", 1},
-          {"input", 3},
-          {"hidden_0", 0},
-          {"hidden_0", 1},
-          {"hidden_0", 0},
-          {"hidden_0", 1},
-          {"output", 0},
-          {"output", 1},
-          {"output", 2}
+          %{node: {"input", 1}, noodles: input_noodles()},
+          %{node: {"input", 3}, noodles: input_noodles()},
+          %{node: {"hidden_0", 1}, noodles: []},
+          %{node: {"hidden_0", 0}, noodles: []},
+          %{node: {"hidden_0", 0}, noodles: []},
+          %{node: {"hidden_0", 1}, noodles: []},
+          %{node: {"output", 2}, noodles: output_noodles()},
+          %{node: {"output", 1}, noodles: output_noodles()},
+          %{node: {"output", 0}, noodles: output_noodles()}
         ],
-        render_fn: render,
+        render_fn: &render_node/2,
         render_frame_fn: nil
       }
     ]
   end
 
   @doc """
-  Axon model: 4 inputs -> 2 hidden (gelu) -> 3 outputs (softmax).
+  Axon model: 4 inputs -> 2 hidden (tanh) -> 3 outputs (softmax).
 
   No bias terms, which makes the classification slightly harder to learn and
-  more interesting to watch train. GELU (rather than tanh) is used for the
-  hidden activation --- with only 2 hidden units tanh gets stuck in local
-  minima ~80% of the time, whereas GELU reaches 100% training accuracy in
-  ~80% of runs. Softmax ensures outputs are normalised probabilities
-  summing to 1.
+  more interesting to watch train. Softmax ensures outputs are normalised
+  probabilities summing to 1.
   """
   def model do
     Axon.input("bits", shape: {nil, 4})
     |> Axon.dense(2, use_bias: false)
-    |> Axon.gelu()
+    |> Axon.tanh()
     |> Axon.dense(3, use_bias: false)
     |> Axon.softmax()
   end
@@ -266,54 +192,74 @@ defmodule NeonPerceptron.Builds.V2 do
   end
 
   @doc """
-  Render a single node board's 24 PWM channels.
+  Render a single chip's 24 PWM channels.
 
-  Dispatches to layer-specific rendering: input nodes use monochrome big LEDs
-  with no noodles; hidden/output nodes use RGB big LEDs with noodle pairs
-  showing incoming edge contributions.
+  Dispatches on the node's layer:
+  - **input**: drive all 6 big-LED channels at `activation` (mono
+    shows white brightness; RGB shows white-at-activation since all
+    three colour channels are equal). Drive each noodle pair based
+    on this input's outgoing-edge contribution to the targeted
+    hidden node.
+  - **hidden_0**: drive all 6 big-LED channels at the node's HSV→RGB
+    colour. Only one triple is populated per chip (ch 18-20 for col 1,
+    ch 21-23 for col 2); the other wastes nothing.
+  - **output**: drive all 6 big-LED channels at the node's HSV→RGB
+    colour (both triples populated). Drive each noodle pair based on
+    the incoming-edge contribution from the sourced hidden node.
   """
-  def render_node(%NetworkState{} = state, {"input", index}) do
+  def render_node(%NetworkState{} = state, %{node: {"input", index}, noodles: noodles}) do
     activation = NetworkState.activation_for_node(state, "input", index)
+    contributions = NetworkState.outgoing_contributions(state, "input", index)
 
     Board.blank()
-    |> List.replace_at(Board.front_blue(), activation)
-    |> List.replace_at(Board.front_green(), activation)
-    |> List.replace_at(Board.front_red(), activation)
-    |> List.replace_at(Board.rear_blue(), activation)
-    |> List.replace_at(Board.rear_green(), activation)
-    |> List.replace_at(Board.rear_red(), activation)
+    |> set_big_leds(activation, activation, activation)
+    |> apply_noodles(noodles, contributions)
   end
 
-  def render_node(%NetworkState{} = state, {layer, index}) do
-    activation = NetworkState.activation_for_node(state, layer, index)
-    {r, g, b} = activation_to_rgb(activation, layer)
+  def render_node(%NetworkState{} = state, %{node: {"hidden_0", index}}) do
+    activation = NetworkState.activation_for_node(state, "hidden_0", index)
+    {r, g, b} = activation_to_rgb(activation, "hidden_0")
 
-    channels =
-      Board.blank()
-      |> List.replace_at(Board.front_red(), r)
-      |> List.replace_at(Board.front_green(), g)
-      |> List.replace_at(Board.front_blue(), b)
-      |> List.replace_at(Board.rear_red(), r)
-      |> List.replace_at(Board.rear_green(), g)
-      |> List.replace_at(Board.rear_blue(), b)
+    Board.blank() |> set_big_leds(r, g, b)
+  end
 
-    incoming = NetworkState.incoming_contributions(state, layer, index)
+  def render_node(%NetworkState{} = state, %{node: {"output", index}, noodles: noodles}) do
+    activation = NetworkState.activation_for_node(state, "output", index)
+    {r, g, b} = activation_to_rgb(activation, "output")
+    contributions = NetworkState.incoming_contributions(state, "output", index)
 
-    Enum.with_index(incoming)
-    |> Enum.reduce(channels, fn {{_weight, _act, contribution}, pair_index}, acc ->
-      pos_ch = pair_index * 2
-      neg_ch = pair_index * 2 + 1
+    Board.blank()
+    |> set_big_leds(r, g, b)
+    |> apply_noodles(noodles, contributions)
+  end
 
-      if contribution >= 0 do
-        acc
-        |> List.replace_at(pos_ch, min(contribution, 1.0))
-        |> List.replace_at(neg_ch, 0.0)
-      else
-        acc
-        |> List.replace_at(pos_ch, 0.0)
-        |> List.replace_at(neg_ch, min(abs(contribution), 1.0))
-      end
+  defp set_big_leds(channels, r, g, b) do
+    channels
+    |> List.replace_at(Board.front_blue(), b)
+    |> List.replace_at(Board.front_green(), g)
+    |> List.replace_at(Board.front_red(), r)
+    |> List.replace_at(Board.rear_blue(), b)
+    |> List.replace_at(Board.rear_green(), g)
+    |> List.replace_at(Board.rear_red(), r)
+  end
+
+  defp apply_noodles(channels, noodles, contributions) do
+    Enum.reduce(noodles, channels, fn %{target: {_layer, target_index}} = noodle, acc ->
+      {_w, _a, contribution} = Enum.at(contributions, target_index)
+      apply_noodle_pair(acc, noodle, contribution)
     end)
+  end
+
+  defp apply_noodle_pair(channels, %{blue_ch: blue_ch, red_ch: red_ch}, contribution) do
+    if contribution >= 0 do
+      channels
+      |> List.replace_at(blue_ch, min(contribution, 1.0))
+      |> List.replace_at(red_ch, 0.0)
+    else
+      channels
+      |> List.replace_at(blue_ch, 0.0)
+      |> List.replace_at(red_ch, min(abs(contribution), 1.0))
+    end
   end
 
   defp activation_to_rgb(activation, "hidden_0") do

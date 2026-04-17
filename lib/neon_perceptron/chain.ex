@@ -39,7 +39,13 @@ defmodule NeonPerceptron.Chain do
 
   alias NeonPerceptron.Board
 
-  @type board_spec :: {String.t(), non_neg_integer()}
+  @typedoc """
+  Opaque per-chip descriptor. Chain passes this unchanged to the
+  build's `render_fn`. Builds define their own shape --- V2 uses
+  `%{node: {layer, index}, noodles: [...]}`, TestPattern uses a
+  placeholder tuple.
+  """
+  @type board_spec :: term()
 
   @type config :: %{
           id: atom(),
@@ -128,6 +134,18 @@ defmodule NeonPerceptron.Chain do
     GenServer.call(via(chain_id), {:push_raw, channel_values})
   end
 
+  @doc """
+  Like `push_raw/2` but skips the `24 * chip_count` length check so
+  callers can intentionally clock more bits than the chain can hold.
+  Extra bits fall off the last chip's SOUT.
+
+  Diagnostic only. Use `Diag.flood_oversize/3`.
+  """
+  @spec push_oversize(atom(), [float()]) :: :ok
+  def push_oversize(chain_id, channel_values) when is_list(channel_values) do
+    GenServer.call(via(chain_id), {:push_oversize, channel_values})
+  end
+
   @impl true
   def handle_call({:update, network_state}, _from, state) do
     render_and_send(network_state, state)
@@ -145,6 +163,13 @@ defmodule NeonPerceptron.Chain do
     else
       {:reply, {:error, :bad_length}, state}
     end
+  end
+
+  @impl true
+  def handle_call({:push_oversize, channel_values}, _from, state) do
+    data = channel_values |> Enum.reverse() |> Board.encode()
+    spi_transfer(state.spi, state.mode, state.xlat, data)
+    {:reply, :ok, state}
   end
 
   @impl true
@@ -175,10 +200,11 @@ defmodule NeonPerceptron.Chain do
     Enum.flat_map(boards, fn _board_spec -> Board.blank() end)
   end
 
-  # TLC5947 datasheet max is 30 MHz; 25 MHz leaves headroom and keeps each
-  # 2-chip frame transfer under ~20 us (vs ~58 us at 10 MHz), reducing the
-  # visible brightness disturbance per refresh.
-  @spi_speed_hz 25_000_000
+  # TLC5947 datasheet max is 30 MHz, but bench testing 2026-04-17 showed
+  # 25 MHz degrades through the 9-chip :main ribbon chain (chips 4-8 stay
+  # dark from signal integrity loss). 1 MHz matches the known-good Python
+  # bench config; a 9-chip frame is ~2.6 ms, well inside the 33 ms tick.
+  @spi_speed_hz 1_000_000
 
   defp open_spi(spi_device) do
     case Circuits.SPI.open(spi_device, speed_hz: @spi_speed_hz) do

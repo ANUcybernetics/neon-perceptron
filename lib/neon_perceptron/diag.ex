@@ -156,6 +156,66 @@ defmodule NeonPerceptron.Diag do
     Chain.push_raw(chain_id, frame)
   end
 
+  @doc """
+  Light every noodle pair's "blue" or "red" channel on every chip in
+  `chain_id` to `value` (default 1.0). Reads each chip's noodle spec
+  from the live Chain state (which mirrors the build's
+  `chain_configs/0`), so whatever `blue_ch`/`red_ch` is currently
+  configured is what gets driven.
+
+  Bench use: run `Diag.noodles_all(:main, :blue)` and visually check
+  that every noodle that lights up is actually the blue wire. For any
+  pair where the red wire lights instead, swap `blue_ch` and `red_ch`
+  in that noodle spec and reload.
+
+  Chips with no `:noodles` key (e.g. hidden chips, or builds that
+  don't use the V2 board-spec shape) are skipped silently.
+  """
+  @spec noodles_all(atom(), :blue | :red, float()) :: :ok | {:error, :bad_length}
+  def noodles_all(chain_id, colour, value \\ 1.0)
+      when colour in [:blue, :red] and is_number(value) do
+    boards =
+      Chain.via(chain_id)
+      |> :sys.get_state()
+      |> Map.fetch!(:boards)
+
+    frame =
+      Enum.flat_map(boards, fn board ->
+        case board do
+          %{noodles: noodles} when is_list(noodles) ->
+            Enum.reduce(noodles, Board.blank(), fn noodle, acc ->
+              ch = Map.fetch!(noodle, channel_key(colour))
+              List.replace_at(acc, ch, value * 1.0)
+            end)
+
+          _ ->
+            Board.blank()
+        end
+      end)
+
+    Chain.push_raw(chain_id, frame)
+  end
+
+  defp channel_key(:blue), do: :blue_ch
+  defp channel_key(:red), do: :red_ch
+
+  @doc """
+  Bench sanity check: clock `multiplier * n * 24` values of `value`
+  (default 1.0, multiplier default 3) into `chain_id`. Extra bits fall
+  off the chain's final SOUT — harmless.
+
+  If chips beyond position X still stay dark at `multiplier=3`, the
+  fault is a physical chain break (SOUT→SIN, XLAT, or power) and not a
+  software under-clocking issue.
+  """
+  @spec flood_oversize(atom(), pos_integer(), float()) :: :ok
+  def flood_oversize(chain_id, multiplier \\ 3, value \\ 1.0)
+      when is_integer(multiplier) and multiplier >= 1 and is_number(value) do
+    n = chip_count(chain_id)
+    frame = List.duplicate(value * 1.0, multiplier * n * @channels_per_board)
+    Chain.push_oversize(chain_id, frame)
+  end
+
   defp blank_frame(chain_id), do: blank_frame_for_count(chip_count(chain_id))
 
   defp blank_frame_for_count(n) do
