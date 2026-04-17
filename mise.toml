@@ -45,8 +45,18 @@ depends = ["firmware:leds-bench"]
 env = { MIX_TARGET = "rpi4", MIX_ENV = "prod" }
 run = "mix upload $HOST"
 
+[tasks."compile:rpi5-overlays"]
+description = "Compile custom Pi 5 device-tree overlays (SPI1 pin remap)"
+run = """
+mkdir -p _build/custom-overlays/rpi5
+dtc -@ -I dts -O dtb \
+    -o _build/custom-overlays/rpi5/spi1-1cs-pi5.dtbo \
+    config/rpi5/overlays/spi1-1cs-pi5.dts
+"""
+
 [tasks."firmware:leds-rpi5"]
 description = "Build LED firmware (Raspberry Pi 5, TestPattern build)"
+depends = ["compile:rpi5-overlays"]
 env = { MIX_TARGET = "rpi5", MIX_ENV = "prod" }
 run = "mix firmware"
 

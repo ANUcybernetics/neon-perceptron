@@ -15,10 +15,18 @@ arm_boost=1
 
 dtparam=spi=on
 
-# SPI0 (GPIO 10/11/8) for :input_left chain, SPI3 (GPIO 2/3/0) for :main chain.
-# SPI3 uses the CN4 connector on the power distribution board (silk-screened SPI3).
-dtoverlay=spi0-1cs
-dtoverlay=spi3-1cs
+# SPI0 for :input_left chain, SPI1 for :main chain. cs0_pin= redirects
+# kernel CS off our XLAT pins onto unused GPIOs, freeing GPIO 8/18 for
+# Circuits.GPIO-managed manual XLAT in Chain.ex. Matches the Pi 4
+# approach --- kernel-CS-as-XLAT on Pi 5 works *usually* but has
+# occasional glitches (2026-04-17 bench), so we take control of the
+# XLAT edge with our own busy-wait timing instead.
+#
+# (The :main connector is silk-screened "SPI3" on the power-distribution
+# board but the node boards are resoldered to SPI1 pins. See
+# docs/build_v2_hardware.md.)
+dtoverlay=spi0-1cs,cs0_pin=26
+dtoverlay=spi1-1cs-pi5,cs0_pin=25
 
 dtoverlay=dwc2
 dtoverlay=ramoops

@@ -1,0 +1,45 @@
+/*
+ * Custom overlay: enable RP1 SPI1 with a single chip-select on a
+ * configurable GPIO. Models the stock spi3-1cs-pi5-overlay.dts.
+ *
+ * RP1 pinmux fixes SPI1's MOSI/MISO/SCLK to GPIO 19/20/21; only CS is
+ * user-configurable (software-controlled). V2's :main chain is wired
+ * MOSI=GPIO20, SCLK=GPIO21, XLAT=GPIO18 --- CS on GPIO 18 is the XLAT
+ * pulse the TLC5947 chain needs.
+ *
+ * No shipped Pi 5 overlay targets SPI1, so we compile this ourselves
+ * and ship it in the boot partition alongside the stock overlays.
+ * Loaded via config/rpi5/config.txt: dtoverlay=spi1-1cs-pi5,cs0_pin=18
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2712";
+
+    fragment@0 {
+        target = <&spi1>;
+        frag1: __overlay__ {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&rp1_spi1_gpio19>;
+            cs-gpios = <&gpio 18 1>;
+            status = "okay";
+
+            spidev1_0: spidev@0 {
+                compatible = "spidev";
+                reg = <0>;
+                #address-cells = <1>;
+                #size-cells = <0>;
+                spi-max-frequency = <50000000>;
+                status = "okay";
+            };
+        };
+    };
+
+    __overrides__ {
+        cs0_pin = <&frag1>,"cs-gpios:4";
+    };
+};
