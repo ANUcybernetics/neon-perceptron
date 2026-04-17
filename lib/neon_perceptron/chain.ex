@@ -238,7 +238,27 @@ defmodule NeonPerceptron.Chain do
 
   defp spi_transfer(spi, :hardware, xlat, data) do
     Circuits.SPI.transfer!(spi, data)
+    # BCM2711 aux SPI (SPI1) returns from transfer! before the TX FIFO has
+    # fully drained onto MOSI — bench 2026-04-17 observed a uniform 36-bit
+    # (3-channel) shift on :main because XLAT fired while the last bits
+    # were still in flight. Classic SPI0 (:input_left) doesn't need this
+    # but pays a harmless ~100 µs. µs-precision busy-wait avoids BEAM's
+    # 1 ms Process.sleep floor (which produced visible frame jitter).
+    busy_wait_us(100)
     pulse_xlat(xlat)
+  end
+
+  defp busy_wait_us(us) do
+    deadline = System.monotonic_time(:microsecond) + us
+    spin_until(deadline)
+  end
+
+  defp spin_until(deadline) do
+    if System.monotonic_time(:microsecond) < deadline do
+      spin_until(deadline)
+    else
+      :ok
+    end
   end
 
   defp spi_transfer(_spi, :simulation, _xlat, _data), do: :ok
