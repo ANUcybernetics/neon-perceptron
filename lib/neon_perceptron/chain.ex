@@ -4,10 +4,8 @@ defmodule NeonPerceptron.Chain do
 
   Each Chain subscribes to PubSub for `NetworkState` updates, calls the
   build's render function to produce PWM data for each chip in the chain,
-  concatenates into one buffer, and sends it over SPI. Under the
-  `spiN-1cs` overlay the kernel SPI driver toggles CE0 at transfer end,
-  which drives XLAT --- so all chips in the chain latch simultaneously
-  with no extra GPIO work.
+  concatenates into one buffer, and sends it over SPI, and then pulses the
+  `:xlat_gpio` manually to latch all chips simultaneously.
 
   ## Config
 
@@ -25,14 +23,13 @@ defmodule NeonPerceptron.Chain do
     `(NetworkState.t()) -> [float()]` returning all `N*24` values for
     the whole chain at once. Used by V1 where the pin mapping doesn't
     follow one-chip-per-node.
-  - `:xlat_gpio` (optional) --- GPIO label (e.g. `"GPIO18"`) to pulse
-    manually as XLAT after each SPI transfer. Use this for SPI buses
-    whose kernel CS doesn't toggle reliably at end-of-transfer (notably
-    BCM2711 *aux* SPI, i.e. SPI1/SPI2 on RPi 4). The corresponding
-    overlay must be configured to NOT claim this pin --- e.g.
-    `dtoverlay=spi1-1cs,cs0_pin=27` frees GPIO 18 for userspace control.
-    When `nil`, the kernel's CS pulse on `:spi_device` is the XLAT (works
-    for SPI0).
+  - `:xlat_gpio` --- GPIO label (e.g. `"GPIO8"`) to pulse as XLAT after
+    each SPI transfer. On BCM2711 (Pi 4), kernel CE0 does not toggle
+    reliably enough to latch the TLC5947 on any SPI bus, so manual XLAT
+    is required. The overlay must be configured to NOT claim this pin
+    --- e.g. `dtoverlay=spi0-1cs,cs0_pin=26` redirects kernel CE0 to
+    unused GPIO 26, freeing GPIO 8 for userspace control. When `nil`,
+    relies on the kernel CS pulse as XLAT (untested on Pi 4).
 
   Exactly one of `:render_fn` or `:render_frame_fn` must be provided.
   """

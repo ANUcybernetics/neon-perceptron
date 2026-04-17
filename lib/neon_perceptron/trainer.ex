@@ -18,6 +18,10 @@ defmodule NeonPerceptron.Trainer do
   """
   use GenServer
 
+  # EMLX is only a dep on :host / reTerminal DM (see mix.exs). On :rpi4 the
+  # NIF module doesn't exist, but eval_step_state/1 guards calls at runtime.
+  @compile {:no_warn_undefined, EMLX.NIF}
+
   require Logger
 
   alias NeonPerceptron.NetworkState

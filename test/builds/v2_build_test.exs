@@ -5,10 +5,10 @@ defmodule NeonPerceptron.Builds.V2Test do
   alias NeonPerceptron.NetworkState
 
   describe "topology/0" do
-    test "defines a 4->3->3 network" do
+    test "defines a 4->2->3 network" do
       t = V2.topology()
       assert t.layers == ["input", "hidden_0", "output"]
-      assert t.sizes == %{"input" => 4, "hidden_0" => 3, "output" => 3}
+      assert t.sizes == %{"input" => 4, "hidden_0" => 2, "output" => 3}
     end
   end
 
@@ -21,12 +21,12 @@ defmodule NeonPerceptron.Builds.V2Test do
     test "chains have correct board counts" do
       configs = V2.chain_configs()
       board_counts = Enum.map(configs, &length(&1.boards))
-      assert Enum.sort(board_counts) == [2, 11]
+      assert Enum.sort(board_counts) == [2, 9]
     end
 
-    test "total boards is 13" do
+    test "total boards is 11" do
       total = V2.chain_configs() |> Enum.flat_map(& &1.boards) |> length()
-      assert total == 13
+      assert total == 11
     end
 
     test "all chains have render_fn" do
@@ -35,10 +35,16 @@ defmodule NeonPerceptron.Builds.V2Test do
       end
     end
 
-    test "main chain is on spidev3.0 and input_left on spidev0.0" do
+    test "main chain is on spidev1.0 and input_left on spidev0.0" do
       by_id = V2.chain_configs() |> Map.new(&{&1.id, &1})
       assert by_id[:input_left].spi_device == "spidev0.0"
-      assert by_id[:main].spi_device == "spidev3.0"
+      assert by_id[:main].spi_device == "spidev1.0"
+    end
+
+    test "both chains have xlat_gpio configured" do
+      by_id = V2.chain_configs() |> Map.new(&{&1.id, &1})
+      assert by_id[:input_left].xlat_gpio == "GPIO8"
+      assert by_id[:main].xlat_gpio == "GPIO18"
     end
 
     test "every board entry references a valid layer and node index" do

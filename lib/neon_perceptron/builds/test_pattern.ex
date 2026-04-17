@@ -27,8 +27,8 @@ defmodule NeonPerceptron.Builds.TestPattern do
   """
   def chain_configs do
     [
-      chain(:input_left, "spidev0.0", 2, nil),
-      chain(:main, "spidev3.0", 11, nil)
+      chain(:input_left, "spidev0.0", 2, "GPIO8"),
+      chain(:main, "spidev1.0", 9, "GPIO18")
     ]
   end
 

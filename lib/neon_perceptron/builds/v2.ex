@@ -2,7 +2,7 @@ defmodule NeonPerceptron.Builds.V2 do
   @moduledoc """
   V2 build: 2x2 pattern classifier.
 
-  A 4->3->3 network that classifies 2x2 binary input patterns into three
+  A 4->2->3 network that classifies 2x2 binary input patterns into three
   categories: diagonal, row, or column. Demonstrates that a hidden layer with
   nonlinear activation can solve linearly inseparable classification problems
   --- the core insight from Minsky & Papert's 1969 *Perceptrons* critique.
@@ -11,7 +11,7 @@ defmodule NeonPerceptron.Builds.V2 do
 
   - **4 inputs**: 2x2 grid read row-major [top-left, top-right, bottom-left,
     bottom-right], values 0.0--1.0 (continuous, driven by touch)
-  - **3 hidden** (tanh, no bias)
+  - **2 hidden** (tanh, no bias)
   - **3 outputs** (softmax): probabilities summing to 1
     - output[0] = diagonal (⟍ or ⟋)
     - output[1] = row (top or bottom)
@@ -44,7 +44,7 @@ defmodule NeonPerceptron.Builds.V2 do
   | spidev    | Chain ID      | Chips | Contents                               |
   |-----------|---------------|-------|----------------------------------------|
   | spidev0.0 | `:input_left` | 2     | input[0], input[2]                     |
-  | spidev3.0 | `:main`       | 11    | input_right + hidden (front+rear) + output |
+  | spidev1.0 | `:main`       | 9     | input_right + hidden (front+rear) + output |
 
   The wiring is purely a property of `chain_configs/0` --- edit that
   single function to re-cable the installation.
@@ -130,7 +130,7 @@ defmodule NeonPerceptron.Builds.V2 do
 
   @topology %{
     layers: ["input", "hidden_0", "output"],
-    sizes: %{"input" => 4, "hidden_0" => 3, "output" => 3}
+    sizes: %{"input" => 4, "hidden_0" => 2, "output" => 3}
   }
 
   @output_labels ["diagonal", "row", "column"]
@@ -165,8 +165,9 @@ defmodule NeonPerceptron.Builds.V2 do
   To re-cable, just edit this function. No other code depends on the
   wiring layout.
 
-  Requires `dtoverlay=spi0-1cs` and `dtoverlay=spi1-1cs` in
-  `config/rpi4/config.txt`.
+  Requires `dtoverlay=spi0-1cs,cs0_pin=26` and
+  `dtoverlay=spi1-1cs,cs0_pin=25` in `config/rpi4/config.txt`. Both chains
+  use manual XLAT (kernel CE on Pi 4 doesn't reliably latch TLC5947).
   """
   def chain_configs do
     render = &render_node/2
@@ -175,6 +176,7 @@ defmodule NeonPerceptron.Builds.V2 do
       %{
         id: :input_left,
         spi_device: "spidev0.0",
+        xlat_gpio: "GPIO8",
         boards: [
           {"input", 0},
           {"input", 2}
@@ -184,16 +186,15 @@ defmodule NeonPerceptron.Builds.V2 do
       },
       %{
         id: :main,
-        spi_device: "spidev3.0",
+        spi_device: "spidev1.0",
+        xlat_gpio: "GPIO18",
         boards: [
           {"input", 1},
           {"input", 3},
           {"hidden_0", 0},
           {"hidden_0", 1},
-          {"hidden_0", 2},
           {"hidden_0", 0},
           {"hidden_0", 1},
-          {"hidden_0", 2},
           {"output", 0},
           {"output", 1},
           {"output", 2}
@@ -205,7 +206,7 @@ defmodule NeonPerceptron.Builds.V2 do
   end
 
   @doc """
-  Axon model: 4 inputs -> 3 hidden (tanh) -> 3 outputs (softmax).
+  Axon model: 4 inputs -> 2 hidden (tanh) -> 3 outputs (softmax).
 
   No bias terms, which makes the classification slightly harder to learn and
   more interesting to watch train. Softmax ensures outputs are normalised
@@ -213,7 +214,7 @@ defmodule NeonPerceptron.Builds.V2 do
   """
   def model do
     Axon.input("bits", shape: {nil, 4})
-    |> Axon.dense(3, use_bias: false)
+    |> Axon.dense(2, use_bias: false)
     |> Axon.tanh()
     |> Axon.dense(3, use_bias: false)
     |> Axon.softmax()
