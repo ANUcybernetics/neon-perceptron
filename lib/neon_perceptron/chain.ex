@@ -248,6 +248,15 @@ defmodule NeonPerceptron.Chain do
     pulse_xlat(xlat)
   end
 
+  defp spi_transfer(_spi, :simulation, _xlat, _data), do: :ok
+
+  defp pulse_xlat(nil), do: :ok
+
+  defp pulse_xlat(gpio) do
+    Circuits.GPIO.write(gpio, 1)
+    Circuits.GPIO.write(gpio, 0)
+  end
+
   defp busy_wait_us(us) do
     deadline = System.monotonic_time(:microsecond) + us
     spin_until(deadline)
@@ -259,15 +268,6 @@ defmodule NeonPerceptron.Chain do
     else
       :ok
     end
-  end
-
-  defp spi_transfer(_spi, :simulation, _xlat, _data), do: :ok
-
-  defp pulse_xlat(nil), do: :ok
-
-  defp pulse_xlat(gpio) do
-    Circuits.GPIO.write(gpio, 1)
-    Circuits.GPIO.write(gpio, 0)
   end
 
   defp pubsub_available? do
