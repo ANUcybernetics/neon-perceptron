@@ -35,6 +35,15 @@ partition layouts), use `rpiboot` to expose the eMMC and then
 `mix firmware.burn --device /dev/sdX`. The stock Pi 4B boots from SD card, so
 `burn:leds-bench` handles it directly.
 
+## Hardware reference
+
+`docs/build_v2_hardware.md` is the authoritative description of the V2
+physical installation: chain layout, `:main`/`:input_left` SPI bus and
+XLAT GPIO assignments, per-role TLC5947 channel map, noodle routing,
+and per-chip polarity table. `lib/neon_perceptron/builds/v2.ex`'s
+`chain_configs/0` is the machine-readable mirror of that doc ---
+changes to one should be kept in sync with the other.
+
 ## Custom Nerves system (reterminal_dm)
 
 The project uses a custom Nerves system at
