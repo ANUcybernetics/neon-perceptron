@@ -7,8 +7,7 @@ pnpm = "latest"
 [env]
 # MIX_TARGET = "rpi4"
 
-# Firmware tasks. See docs/superpowers/specs/2026-04-14-multi-board-distributed-build-design.md
-# for the overall architecture. MIX_TARGET selects the hardware:
+# Firmware tasks. MIX_TARGET selects the hardware:
 #   reterminal_dm — reTerminal DM (CM4 with DSI/touch), runs trainer + UI
 #   rpi4          — stock Raspberry Pi 4B, runs the LED driver chains
 #
