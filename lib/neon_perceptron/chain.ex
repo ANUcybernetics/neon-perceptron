@@ -308,8 +308,9 @@ defmodule NeonPerceptron.Chain do
   def handle_call({:push_oversize, channel_values}, _from, state) do
     data = channel_values |> Enum.reverse() |> Board.encode()
     {_received, state} = transmit(state, data, :auto)
-    # What the chips latched isn't a frame of this chain any more.
-    {:reply, :ok, %{state | latched: nil}}
+    # What the chips latched isn't a frame of this chain any more, so there's
+    # nothing to compare against or refresh.
+    {:reply, :ok, %{cancel_timer(state, :refresh_timer) | latched: nil}}
   end
 
   @impl true

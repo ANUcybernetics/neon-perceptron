@@ -230,6 +230,21 @@ defmodule NeonPerceptron.ChainSwitchesTest do
     assert Chain.status(chain).counts.refreshed >= 2
   end
 
+  test "an oversize push stops the refresh and doesn't count as the latched frame" do
+    chain = start_chain(:oversized, %{refresh_ms: 30, send_on_change: true})
+    pid = GenServer.whereis(Chain.via(chain))
+    Chain.update_sync(chain, @half)
+    assert_latched(frame(@half))
+
+    :ok = Chain.push_oversize(chain, List.duplicate(1.0, 72))
+    assert_receive {:spi, "spidev7.0", _}
+    refute_receive {:spi, _, _}, 100
+
+    Chain.update_sync(chain, @half)
+    assert_latched(frame(@half))
+    assert GenServer.whereis(Chain.via(chain)) == pid
+  end
+
   test "blank_gpio keeps the outputs off until the first latch" do
     chain = start_chain(:blanked, %{blank_gpio: "GPIO17"})
     assert_receive {:gpio_open, "GPIO17", :output, 1}
