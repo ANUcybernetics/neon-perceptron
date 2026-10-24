@@ -19,13 +19,16 @@ The project builds firmware for two different boards, each with its own
 Prefer the mise tasks in `mise.toml`:
 
 - `mise run firmware:ui` --- build reTerminal DM firmware
-- `mise run firmware:leds-bench` --- build stock rpi4 bench firmware (TestPattern)
+- `mise run firmware:leds-bench` --- build stock rpi4 bench firmware
+  (TestPattern)
 - `mise run upload:ui HOST=nerves-ui.local` --- OTA push to UI board
 - `mise run upload:leds-bench HOST=nerves-leds.local` --- OTA push to LED board
-- `DEVICE=/dev/sdX mise run burn:leds-bench` --- first-time flash LED board's SD card
+- `DEVICE=/dev/sdX mise run burn:leds-bench` --- first-time flash LED board's SD
+  card
 
-Raw equivalent: `mise exec -- env MIX_TARGET=reterminal_dm MIX_ENV=prod mix firmware`
-or `MIX_TARGET=rpi4` for the LED board.
+Raw equivalent:
+`mise exec -- env MIX_TARGET=reterminal_dm MIX_ENV=prod mix firmware` or
+`MIX_TARGET=rpi4` for the LED board.
 
 OTA uses the RPi4 tryboot A/B scheme with automatic rollback --- no physical
 access needed.
@@ -37,12 +40,12 @@ partition layouts), use `rpiboot` to expose the eMMC and then
 
 ## Hardware reference
 
-`docs/build_v2_hardware.md` is the authoritative description of the V2
-physical installation: chain layout, `:main`/`:input_left` SPI bus and
-XLAT GPIO assignments, per-role TLC5947 channel map, noodle routing,
-and per-chip polarity table. `lib/neon_perceptron/builds/v2.ex`'s
-`chain_configs/0` is the machine-readable mirror of that doc ---
-changes to one should be kept in sync with the other.
+`docs/build_v2_hardware.md` is the authoritative description of the V2 physical
+installation: chain layout, `:main`/`:input_left` SPI bus and XLAT GPIO
+assignments, per-role TLC5947 channel map, noodle routing, and per-chip polarity
+table. `lib/neon_perceptron/builds/v2.ex`'s `chain_configs/0` is the
+machine-readable mirror of that doc --- changes to one should be kept in sync
+with the other.
 
 ## Custom Nerves system (reterminal_dm)
 
@@ -62,9 +65,9 @@ cd /path/to/reterminal_dm
 NERVES_BR_DOCKER=podman mise exec -- mix compile
 ```
 
-First build takes ~20 min with 48 cores (`BR2_JLEVEL=0`). Prebuilt artifacts
-are published as GitHub releases --- only rebuild if you change the system
-itself (defconfig, fwup.conf, fwup-ops.conf, kernel config, custom packages).
+First build takes ~20 min with 48 cores (`BR2_JLEVEL=0`). Prebuilt artifacts are
+published as GitHub releases --- only rebuild if you change the system itself
+(defconfig, fwup.conf, fwup-ops.conf, kernel config, custom packages).
 
 **Important:** `fwup-ops.conf` must stay in sync with `fwup.conf`. If you change
 the partition layout or A/B scheme in `fwup.conf`, you must update
@@ -81,12 +84,14 @@ the browser (see TASK-15), so the pipeline is:
 
 1. Goodix touchscreen → `/dev/input/event0` (kernel evdev)
 2. `InputEvent` library (Elixir, poll-based) → `NeonPerceptron.Touch` GenServer
-3. PubSub broadcast on the `"touch"` topic with `{:touch, :down | :move | :up, {x, y}}`
+3. PubSub broadcast on the `"touch"` topic with
+   `{:touch, :down | :move | :up, {x, y}}`
 4. LiveView subscribes and uses `push_event` or assigns to update the browser
 
 This means all touch-driven UI must go through LiveView server events, not
-client-side JS event listeners. Use `Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")`
-in `mount/3` and handle `{:touch, type, {x, y}}` messages in `handle_info/2`.
+client-side JS event listeners. Use
+`Phoenix.PubSub.subscribe(NeonPerceptron.PubSub, "touch")` in `mount/3` and
+handle `{:touch, type, {x, y}}` messages in `handle_info/2`.
 
 ## Digital twin
 
