@@ -1,8 +1,6 @@
 defmodule NeonPerceptron.LabTest do
   use ExUnit.Case, async: false
 
-  import ExUnit.CaptureIO
-
   alias NeonPerceptron.{Board, Chain, FakeCircuits, Lab}
 
   setup context do
@@ -85,6 +83,29 @@ defmodule NeonPerceptron.LabTest do
     assert Enum.count(events, &(&1 == {:xlat, 1})) == ticks
   end
 
+  test "jitter moves ticks off their even spacing, within half a period" do
+    :ok = Lab.fill(:lab_a, 1000)
+
+    assert {:error, {:bad_jitter, 10}} =
+             Lab.start(%{kind: :relatch, rate_hz: 50, jitter_ms: 10, chains: [:lab_a]})
+
+    _ = drain("spidev7.0")
+    :ok = Lab.start(%{kind: :relatch, rate_hz: 50, jitter_ms: 8, chains: [:lab_a]})
+    arrivals = for _ <- 1..10, do: receive_spi_time("spidev7.0")
+    Lab.stop()
+
+    gaps = arrivals |> Enum.chunk_every(2, 1, :discard) |> Enum.map(fn [a, b] -> b - a end)
+    assert Enum.max(gaps) - Enum.min(gaps) > 4
+  end
+
+  defp receive_spi_time(bus) do
+    receive do
+      {:spi, ^bus, _data} -> System.monotonic_time(:millisecond)
+    after
+      500 -> flunk("no transfer on #{bus}")
+    end
+  end
+
   test "reshift re-sends the frame without latching it" do
     :ok = Lab.fill(:lab_a, 1000)
     _ = drain("spidev7.0")
@@ -165,11 +186,10 @@ defmodule NeonPerceptron.LabTest do
     assert %{frames: 8, matched: 0, bit_errors: 8} = Lab.readback(:lab_a, 8)
   end
 
-  test "reply prints one LAB line with a JSON envelope" do
-    assert capture_io(fn -> Lab.reply(%{ticks: 3, kind: :relatch}) end) ==
-             ~s(LAB {"ok":{"kind":"relatch","ticks":3}}\n)
+  test "reply inspects as one LAB line with a JSON envelope" do
+    assert inspect(Lab.reply(%{ticks: 3, kind: :relatch})) ==
+             ~s(LAB {"ok":{"kind":"relatch","ticks":3}})
 
-    assert capture_io(fn -> Lab.reply({:error, :no_frames}) end) ==
-             ~s(LAB {"error":":no_frames"}\n)
+    assert inspect(Lab.reply({:error, :no_frames})) == ~s(LAB {"error":":no_frames"})
   end
 end

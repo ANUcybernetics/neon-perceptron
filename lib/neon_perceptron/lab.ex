@@ -31,9 +31,14 @@ defmodule NeonPerceptron.Lab do
     `±d` at `f` Hz, latched at `r` Hz. Shows how small a flicker the
     camera can see.
 
-  `:chains` limits `:relatch` and `:reshift` to a list of chains.
+  `:chains` limits `:relatch` and `:reshift` to a list of chains, and
+  `:jitter_ms` moves each of their ticks by a random amount up to that
+  far either side of its slot (less than half a period). A camera running
+  near a multiple of the tick rate sees a regular disturbance at the same
+  point of every frame, where it can't tell it from a steady one; jitter
+  spreads the disturbances across the frame.
 
-  The rig wraps each call in `reply/1`, which prints the result as one
+  The rig wraps each call in `reply/1`, whose result inspects as one
   `LAB <json>` line.
   """
   use GenServer
@@ -128,17 +133,23 @@ defmodule NeonPerceptron.Lab do
   """
   def configure(chain, switches), do: Chain.configure(chain, switches)
 
-  @doc """
-  Print `result` as one `LAB <json>` line for the rig, as
-  `{"ok": result}` or `{"error": reason}`.
-  """
-  def reply({:error, reason}), do: emit(%{error: inspect(reason)})
-  def reply(result), do: emit(%{ok: jsonable(result)})
+  defmodule Reply do
+    @moduledoc false
+    defstruct [:json]
 
-  defp emit(envelope) do
-    IO.puts("LAB " <> JSON.encode!(envelope))
-    :ok
+    defimpl Inspect do
+      def inspect(%{json: json}, _opts), do: "LAB " <> json
+    end
   end
+
+  @doc """
+  Wrap `result` for the rig: it inspects as one `LAB <json>` line, with
+  `{"ok": result}` or `{"error": reason}`. NervesSSH sends back
+  `inspect/1` of what a command returns, in a single write. Output
+  printed by the command takes another route and can arrive after it.
+  """
+  def reply({:error, reason}), do: %Reply{json: JSON.encode!(%{error: inspect(reason)})}
+  def reply(result), do: %Reply{json: JSON.encode!(%{ok: jsonable(result)})}
 
   defp jsonable(term) when is_struct(term), do: inspect(term)
   defp jsonable(%{} = map), do: Map.new(map, fn {k, v} -> {to_string(k), jsonable(v)} end)
@@ -229,6 +240,7 @@ defmodule NeonPerceptron.Lab do
           period_ms: period_ms,
           started_at: now,
           next_at: now + period_ms,
+          fire_at: nil,
           ticks: 0,
           skipped: 0,
           max_late_ms: 0,
@@ -300,7 +312,7 @@ defmodule NeonPerceptron.Lab do
     condition = %{
       condition
       | ticks: condition.ticks + 1,
-        max_late_ms: max(condition.max_late_ms, round(now - condition.next_at)),
+        max_late_ms: max(condition.max_late_ms, round(now - condition.fire_at)),
         next_at: condition.next_at + condition.period_ms
     }
 
@@ -340,13 +352,15 @@ defmodule NeonPerceptron.Lab do
        when kind in [:relatch, :reshift] and is_number(rate) and rate > 0 do
     chains = Map.get(spec, :chains, Map.keys(state.frames))
     latch = Map.get(spec, :latch, :xlat)
+    jitter = Map.get(spec, :jitter_ms, 0)
 
     cond do
       chains == [] -> {:error, :no_frames}
       not Enum.all?(chains, &Map.has_key?(state.frames, &1)) -> {:error, :no_frame_for_chain}
       latch not in [:xlat, :blank_pulse] -> {:error, {:bad_latch, latch}}
       latch == :blank_pulse and not Enum.all?(chains, &blank_gpio?/1) -> {:error, :no_blank_gpio}
-      true -> {:ok, %{kind: kind, rate_hz: rate, chains: chains, latch: latch}}
+      not valid_jitter?(jitter, rate) -> {:error, {:bad_jitter, jitter}}
+      true -> {:ok, %{kind: kind, rate_hz: rate, chains: chains, latch: latch, jitter_ms: jitter}}
     end
   end
 
@@ -376,7 +390,8 @@ defmodule NeonPerceptron.Lab do
          depth: depth,
          freq_hz: freq,
          rate_hz: rate,
-         latch: latch
+         latch: latch,
+         jitter_ms: 0
        }}
     end
   end
@@ -386,10 +401,15 @@ defmodule NeonPerceptron.Lab do
   defp or_error({:ok, value}, _reason), do: {:ok, value}
   defp or_error(:error, reason), do: {:error, reason}
 
-  defp schedule_tick(condition) do
-    Process.send_after(self(), {:tick, condition.ref}, round(condition.next_at), abs: true)
-    condition
+  # A tick fires up to `jitter_ms` either side of its slot, while the slots
+  # themselves stay evenly spaced.
+  defp schedule_tick(%{spec: %{jitter_ms: jitter}} = condition) do
+    fire_at = condition.next_at + (2 * :rand.uniform() - 1) * jitter
+    Process.send_after(self(), {:tick, condition.ref}, round(fire_at), abs: true)
+    %{condition | fire_at: fire_at}
   end
+
+  defp valid_jitter?(jitter, rate), do: is_number(jitter) and jitter >= 0 and jitter < 500 / rate
 
   defp stop_condition(state), do: %{state | condition: nil}
 
