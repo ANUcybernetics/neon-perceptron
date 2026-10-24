@@ -47,6 +47,14 @@ table. `lib/neon_perceptron/builds/v2.ex`'s `chain_configs/0` is the
 machine-readable mirror of that doc --- changes to one should be kept in sync
 with the other.
 
+## Webcam rig
+
+With the installation beside weddle, Claude can run LED experiments unattended
+(TASK-24): `rig/` drives `NeonPerceptron.Lab` on the LED Pi over SSH and
+measures the LEDs with a webcam on weddle. Run it with
+`mise run rig -- <command>`; `rig/README.md` covers setup, the experiments and
+how to read the results.
+
 ## Custom Nerves system (reterminal_dm)
 
 The project uses a custom Nerves system at

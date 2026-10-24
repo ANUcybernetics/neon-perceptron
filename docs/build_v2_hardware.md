@@ -42,9 +42,10 @@ Two senses of "front/back" exist and are deliberately kept separate:
 | `:input_left` | SPI0    | `spidev0.0` | 2     | GPIO 8    | `input[0]`, `input[2]`                     |
 | `:main`       | SPI1*   | `spidev1.0` | 9     | GPIO 18   | `input[1]`, `input[3]`, 4 hidden, 3 output |
 
-\* Physically connects via the "SPI3" silk-screened connector on the power
-distribution board, but the node boards are resoldered to route SPI1 pins. The
-silk-screen is stale.
+\* Connects through the distribution board's "SPI3" connector (CN4). Brendan cut
+the board down to its SPI0 and SPI3 connectors and soldered jumpers so the SPI3
+connector carries SPI1. Which pads, and whether the old SPI3 traces (GPIO 0, 2,
+3 and 24) were cut, isn't recorded.
 
 Required overlays in `config/rpi4/config.txt`:
 
@@ -56,8 +57,36 @@ dtoverlay=spi1-1cs,cs0_pin=25   # frees GPIO 18 for manual XLAT
 Both chains use manual XLAT via `Circuits.GPIO` --- kernel CS on BCM2711 does
 not reliably latch the TLC5947 on any SPI bus. See
 `lib/neon_perceptron/chain.ex`'s `@spi_speed_hz` (1 MHz) for the SPI clock
-setting; 25 MHz fails past chip 3 on the 9-chip `:main` ribbon chain (signal
-integrity).
+setting; 25 MHz fails past chip 3 on the 9-chip `:main` ribbon chain, and is
+over the TLC5947's 15 MHz limit for cascaded chips anyway.
+
+### Distribution board connectors
+
+Traced from the vectors of `backlog/tasks/power-distribution-v1.2.pdf`, each
+32-pin connector is its own bus, and all five share one pinout:
+
+| Pin    | Signal                                   |
+| ------ | ---------------------------------------- |
+| 1--10  | VCC                                      |
+| 14     | a spare GPIO for the bus, probably BLANK |
+| 16     | latch (XLAT)                             |
+| 17     | data (MOSI)                              |
+| 20     | clock (SCLK)                             |
+| 23--32 | GND                                      |
+
+| Connector | Silk-screen | Data    | Clock   | Latch   | Pin 14  |
+| --------- | ----------- | ------- | ------- | ------- | ------- |
+| CN5       | SPI0        | GPIO 10 | GPIO 11 | GPIO 8  | GPIO 22 |
+| CN6       | SPI1        | GPIO 20 | GPIO 21 | GPIO 18 | GPIO 17 |
+| CN4       | SPI3        | GPIO 2  | GPIO 3  | GPIO 0  | GPIO 24 |
+| CN2       | SPI4        | GPIO 6  | GPIO 7  | GPIO 4  | GPIO 25 |
+| CN3       | SPI5        | GPIO 14 | GPIO 15 | GPIO 12 | GPIO 26 |
+
+The firmware has never driven pin 14. If it is BLANK, all that holds it low is
+the Pi's default pull-down while the Pi is on, and on the reworked CN4 it may
+not even reach the GPIO listed. `neon-rig blank-search` (in `rig/`) drives GPIOs
+22, 24 and 17 to find each chain's BLANK, and a chain's `:blank_gpio` switch
+(see `NeonPerceptron.Chain`) then drives it.
 
 ### `:main` chip order (0-indexed, MOSI → end)
 
@@ -173,6 +202,9 @@ only specific chips need swapping, break the shared templates out into per-chip
 literals.
 
 ## Characterising new channels
+
+`neon-rig map` (see `rig/README.md`) lights every channel on its own and records
+where the webcam sees it, colour included, which covers every chip at once.
 
 `Diag.light/4` lights a single channel on a single chip; `Diag.light_chip/3`
 lights a whole chip; `Diag.light_all/2-3` lights one channel across every chip.
