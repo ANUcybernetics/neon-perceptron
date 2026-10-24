@@ -23,8 +23,11 @@ defmodule NeonPerceptron.Application do
     Supervisor.start_link(children, opts)
   end
 
+  # PubSub comes first: chains subscribe to it in init/1, and Touch
+  # broadcasts on it.
   defp common_children do
     [
+      {Phoenix.PubSub, name: NeonPerceptron.PubSub},
       {Registry, keys: :unique, name: NeonPerceptron.ChainRegistry},
       NeonPerceptron.Touch
     ]
@@ -54,10 +57,7 @@ defmodule NeonPerceptron.Application do
   end
 
   defp phoenix_children do
-    [
-      {Phoenix.PubSub, name: NeonPerceptron.PubSub},
-      NeonPerceptronWeb.Endpoint
-    ]
+    [NeonPerceptronWeb.Endpoint]
   end
 
   if Mix.target() == :host do
