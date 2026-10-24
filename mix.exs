@@ -13,10 +13,14 @@ defmodule NeonPerceptron.MixProject do
       archives: [nerves_bootstrap: "~> 1.14"],
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
       start_permanent: Mix.env() == :prod,
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       releases: [{@app, release()}]
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_env), do: ["lib"]
 
   def cli do
     [preferred_targets: [run: :host, test: :host]]

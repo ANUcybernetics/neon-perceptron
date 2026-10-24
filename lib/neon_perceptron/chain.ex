@@ -5,7 +5,8 @@ defmodule NeonPerceptron.Chain do
   Each Chain subscribes to PubSub for `NetworkState` updates, calls the
   build's render function to produce PWM data for each chip in the chain,
   concatenates into one buffer, and sends it over SPI, and then pulses the
-  `:xlat_gpio` manually to latch all chips simultaneously.
+  `:xlat_gpio` manually to latch all chips simultaneously. The switches
+  below decide which updates get sent, and how they are latched.
 
   ## Config
 
@@ -32,6 +33,35 @@ defmodule NeonPerceptron.Chain do
     relies on the kernel CS pulse as XLAT (untested on Pi 4).
 
   Exactly one of `:render_fn` or `:render_frame_fn` must be provided.
+
+  ## Switches
+
+  Every XLAT rising edge turns a TLC5947's outputs off until its next PWM
+  period starts, so each latch loses up to one period (0.7--1.7 ms) of
+  light at a random point. These keys change how often the chain latches,
+  and how. Set them in the chain config, or at runtime with `configure/2`.
+  The defaults latch every update straight away, as in the April bench
+  sessions.
+
+  - `:send_on_change` --- skip an update whose frame matches the one
+    latched or queued. Default `false`.
+  - `:max_rate_hz` --- latch at most this often. An update that arrives
+    sooner waits for its slot, and a newer one replaces it. Default `nil`
+    (no cap).
+  - `:refresh_ms` --- re-send the latched frame when nothing has been
+    latched for this long, to recover from a corrupted transfer. Default
+    `nil` (off).
+  - `:blank_gpio` --- GPIO label of the chain's BLANK line. BLANK is held
+    high (outputs off) from start-up until the first latch, then low.
+    Default `nil` (not driven).
+  - `:blank_pulse` --- with `:blank_gpio`, raise BLANK around every XLAT
+    pulse. That resets the PWM counter, so the new frame starts a fresh
+    period instead of the latch cutting the current one short. Default
+    `false`.
+
+  `hold/1` makes the chain ignore updates until `release/1`, so an
+  experiment can drive it with `shift/3` without the build overwriting
+  its frames.
   """
   use GenServer
 
@@ -47,6 +77,9 @@ defmodule NeonPerceptron.Chain do
   """
   @type board_spec :: term()
 
+  @typedoc """
+  The config map, which may also carry any of the `t:switches/0` keys.
+  """
   @type config :: %{
           id: atom(),
           spi_device: String.t(),
@@ -55,6 +88,29 @@ defmodule NeonPerceptron.Chain do
           render_frame_fn: (NeonPerceptron.NetworkState.t() -> [float()]) | nil,
           xlat_gpio: String.t() | nil
         }
+
+  @type switches :: %{
+          send_on_change: boolean(),
+          max_rate_hz: number() | nil,
+          refresh_ms: pos_integer() | nil,
+          blank_gpio: String.t() | nil,
+          blank_pulse: boolean()
+        }
+
+  @typedoc """
+  How `shift/3` latches: `:xlat`, `:blank_pulse` (BLANK high, pulse XLAT,
+  BLANK low), `:none` (shift only), or `:auto` (`:blank_pulse` when that
+  switch is on, otherwise `:xlat`).
+  """
+  @type latch :: :auto | :xlat | :blank_pulse | :none
+
+  @switch_defaults %{
+    send_on_change: false,
+    max_rate_hz: nil,
+    refresh_ms: nil,
+    blank_gpio: nil,
+    blank_pulse: false
+  }
 
   def child_spec(config) do
     %{
@@ -80,17 +136,35 @@ defmodule NeonPerceptron.Chain do
       end
     end
 
+    switches =
+      case config |> Map.take(Map.keys(@switch_defaults)) |> validate_switches() do
+        {:ok, changes} -> Map.merge(@switch_defaults, changes)
+        {:error, reason} -> raise ArgumentError, "bad chain switch: #{inspect(reason)}"
+      end
+
     {spi, mode} = open_spi(config.spi_device)
     xlat = open_xlat(config[:xlat_gpio])
+    blank = open_blank(switches.blank_gpio, 1)
 
     state = %{
       id: config.id,
+      spi_device: config.spi_device,
       spi: spi,
       mode: mode,
       xlat: xlat,
+      blank: blank,
+      blanked: blank != nil,
       boards: config[:boards] || [],
       render_fn: config[:render_fn],
-      render_frame_fn: config[:render_frame_fn]
+      render_frame_fn: config[:render_frame_fn],
+      switches: switches,
+      held: false,
+      latched: nil,
+      latched_at: nil,
+      pending: nil,
+      pending_timer: nil,
+      refresh_timer: nil,
+      counts: %{requested: 0, sent: 0, unchanged: 0, coalesced: 0, refreshed: 0, ignored: 0}
     }
 
     {:ok, state}
@@ -98,8 +172,23 @@ defmodule NeonPerceptron.Chain do
 
   @impl true
   def handle_info({:network_state, network_state}, state) do
-    render_and_send(network_state, state)
-    {:noreply, state}
+    {:noreply, request(state, network_state)}
+  end
+
+  def handle_info({:timeout, timer, :send_pending}, %{pending_timer: timer} = state) do
+    data = state.pending
+    state = %{state | pending: nil, pending_timer: nil}
+
+    if state.switches.send_on_change and data == state.latched do
+      {:noreply, count(state, :unchanged)}
+    else
+      {:noreply, send_frame(state, data)}
+    end
+  end
+
+  def handle_info({:timeout, timer, :refresh}, %{refresh_timer: timer} = state) do
+    {_received, state} = transmit(%{state | refresh_timer: nil}, state.latched, :auto)
+    {:noreply, count(state, :refreshed)}
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
@@ -112,9 +201,9 @@ defmodule NeonPerceptron.Chain do
   end
 
   @doc """
-  Synchronous version of `update/2`. Returns after the SPI transfer
-  completes. Rarely needed now that chains have independent XLATs ---
-  kept for use cases that want back-pressure.
+  Synchronous version of `update/2`. Returns once the update has been
+  sent, skipped or queued. Rarely needed now that chains have
+  independent XLATs --- kept for use cases that want back-pressure.
   """
   def update_sync(chain_id, network_state) do
     GenServer.call(via(chain_id), {:update, network_state})
@@ -146,19 +235,69 @@ defmodule NeonPerceptron.Chain do
     GenServer.call(via(chain_id), {:push_oversize, channel_values})
   end
 
+  @doc """
+  Shift raw 12-bit grayscale values (`24 * chip_count`, chip-major like
+  `push_raw/2`, no gamma) into the chain and latch them as `latch` says
+  (see `t:latch/0`). Ignores the switches and `hold/1`.
+
+  Returns the bytes sent and the bytes clocked in on MISO meanwhile. With
+  the last chip's SOUT wired to MISO, those are the shift register's
+  previous contents.
+  """
+  @spec shift(atom(), [non_neg_integer()], latch()) ::
+          {:ok, %{sent: binary(), received: binary()}}
+          | {:error, :bad_length | :no_blank_gpio}
+  def shift(chain_id, gs_values, latch \\ :auto)
+      when is_list(gs_values) and latch in [:auto, :xlat, :blank_pulse, :none] do
+    GenServer.call(via(chain_id), {:shift, gs_values, latch})
+  end
+
+  @doc """
+  Change switches at runtime (see the moduledoc). Keys not given keep
+  their current values.
+  """
+  @spec configure(atom(), keyword() | map()) ::
+          :ok | {:error, {:invalid_switch, atom(), term()}}
+  def configure(chain_id, switches) do
+    GenServer.call(via(chain_id), {:configure, Map.new(switches)})
+  end
+
+  @doc """
+  Ignore updates from the build until `release/1`. Drops any frame
+  waiting on `:max_rate_hz`.
+  """
+  @spec hold(atom()) :: :ok
+  def hold(chain_id), do: GenServer.call(via(chain_id), :hold)
+
+  @doc """
+  Resume taking updates after `hold/1`.
+  """
+  @spec release(atom()) :: :ok
+  def release(chain_id), do: GenServer.call(via(chain_id), :release)
+
+  @doc """
+  The chain's switches, counters and hold state.
+
+  `:counts` tallies updates: `:requested` (rendered), `:sent`,
+  `:unchanged` (skipped by `:send_on_change`), `:coalesced` (replaced
+  while waiting on `:max_rate_hz`), `:refreshed` and `:ignored` (arrived
+  while held).
+  """
+  @spec status(atom()) :: map()
+  def status(chain_id), do: GenServer.call(via(chain_id), :status)
+
   @impl true
   def handle_call({:update, network_state}, _from, state) do
-    render_and_send(network_state, state)
-    {:reply, :ok, state}
+    {:reply, :ok, request(state, network_state)}
   end
 
   @impl true
   def handle_call({:push_raw, channel_values}, _from, state) do
-    expected = length(state.boards) * 24
+    expected = length(state.boards) * Board.channels_per_board()
 
     if length(channel_values) == expected do
       data = channel_values |> Enum.reverse() |> Board.encode()
-      spi_transfer(state.spi, state.mode, state.xlat, data)
+      {_received, state} = transmit(state, data, :auto)
       {:reply, :ok, state}
     else
       {:reply, {:error, :bad_length}, state}
@@ -168,20 +307,91 @@ defmodule NeonPerceptron.Chain do
   @impl true
   def handle_call({:push_oversize, channel_values}, _from, state) do
     data = channel_values |> Enum.reverse() |> Board.encode()
-    spi_transfer(state.spi, state.mode, state.xlat, data)
-    {:reply, :ok, state}
+    {_received, state} = transmit(state, data, :auto)
+    # What the chips latched isn't a frame of this chain any more.
+    {:reply, :ok, %{state | latched: nil}}
+  end
+
+  @impl true
+  def handle_call({:shift, gs_values, latch}, _from, state) do
+    latch = resolve_latch(latch, state)
+
+    cond do
+      length(gs_values) != length(state.boards) * Board.channels_per_board() ->
+        {:reply, {:error, :bad_length}, state}
+
+      latch == :blank_pulse and state.blank == nil ->
+        {:reply, {:error, :no_blank_gpio}, state}
+
+      true ->
+        data = gs_values |> Enum.reverse() |> Board.pack()
+        {received, state} = transmit(state, data, latch)
+        {:reply, {:ok, %{sent: data, received: received}}, state}
+    end
+  end
+
+  @impl true
+  def handle_call({:configure, changes}, _from, state) do
+    case validate_switches(changes) do
+      {:ok, changes} -> {:reply, :ok, apply_switches(state, changes)}
+      {:error, _reason} = error -> {:reply, error, state}
+    end
+  end
+
+  @impl true
+  def handle_call(:hold, _from, state) do
+    state = state |> cancel_pending() |> cancel_timer(:refresh_timer)
+    {:reply, :ok, %{state | held: true}}
+  end
+
+  @impl true
+  def handle_call(:release, _from, state) do
+    {:reply, :ok, schedule_refresh(%{state | held: false})}
+  end
+
+  @impl true
+  def handle_call(:status, _from, state) do
+    status = %{
+      id: state.id,
+      spi_device: state.spi_device,
+      mode: state.mode,
+      chips: length(state.boards),
+      held: state.held,
+      switches: state.switches,
+      counts: state.counts,
+      pending: state.pending != nil,
+      ms_since_latch: state.latched_at && now_ms() - state.latched_at
+    }
+
+    {:reply, status, state}
   end
 
   @impl true
   def handle_cast({:update, network_state}, state) do
-    render_and_send(network_state, state)
-    {:noreply, state}
+    {:noreply, request(state, network_state)}
   end
 
-  defp render_and_send(network_state, state) do
-    channel_values = render_all_boards(network_state, state)
-    data = channel_values |> Enum.reverse() |> Board.encode()
-    spi_transfer(state.spi, state.mode, state.xlat, data)
+  defp request(%{held: true} = state, _network_state), do: count(state, :ignored)
+
+  defp request(state, network_state) do
+    data =
+      network_state
+      |> render_all_boards(state)
+      |> Enum.reverse()
+      |> Board.encode()
+
+    state = count(state, :requested)
+
+    cond do
+      state.switches.send_on_change and data == (state.pending || state.latched) ->
+        count(state, :unchanged)
+
+      rate_limited?(state) ->
+        queue(state, data)
+
+      true ->
+        send_frame(state, data)
+    end
   end
 
   defp render_all_boards(network_state, %{render_frame_fn: render_frame_fn})
@@ -200,11 +410,102 @@ defmodule NeonPerceptron.Chain do
     Enum.flat_map(boards, fn _board_spec -> Board.blank() end)
   end
 
-  # TLC5947 datasheet max is 30 MHz, but bench testing 2026-04-17 showed
-  # 25 MHz degrades through the 9-chip :main ribbon chain (chips 4-8 stay
-  # dark from signal integrity loss). 1 MHz matches the known-good Python
-  # bench config; a 9-chip frame is ~2.6 ms, well inside the 33 ms tick.
+  defp rate_limited?(%{switches: %{max_rate_hz: nil}}), do: false
+  defp rate_limited?(%{latched_at: nil}), do: false
+  defp rate_limited?(state), do: now_ms() < next_slot(state)
+
+  defp next_slot(state), do: state.latched_at + ceil(1000 / state.switches.max_rate_hz)
+
+  defp queue(state, data) do
+    state = if state.pending, do: count(state, :coalesced), else: state
+
+    timer =
+      state.pending_timer ||
+        :erlang.start_timer(next_slot(state), self(), :send_pending, abs: true)
+
+    %{state | pending: data, pending_timer: timer}
+  end
+
+  defp send_frame(state, data) do
+    {_received, state} = state |> cancel_pending() |> transmit(data, :auto)
+    count(state, :sent)
+  end
+
+  defp cancel_pending(state), do: %{cancel_timer(state, :pending_timer) | pending: nil}
+
+  defp cancel_timer(state, key) do
+    case Map.fetch!(state, key) do
+      nil -> :ok
+      timer -> :erlang.cancel_timer(timer)
+    end
+
+    Map.put(state, key, nil)
+  end
+
+  defp schedule_refresh(state) do
+    state = cancel_timer(state, :refresh_timer)
+
+    if state.switches.refresh_ms && state.latched && !state.held do
+      %{state | refresh_timer: :erlang.start_timer(state.switches.refresh_ms, self(), :refresh)}
+    else
+      state
+    end
+  end
+
+  defp count(state, key), do: update_in(state, [:counts, key], &(&1 + 1))
+
+  defp resolve_latch(:auto, %{switches: %{blank_pulse: true}, blank: blank}) when blank != nil,
+    do: :blank_pulse
+
+  defp resolve_latch(:auto, _state), do: :xlat
+  defp resolve_latch(latch, _state), do: latch
+
+  defp validate_switches(switches) do
+    Enum.reduce_while(switches, {:ok, %{}}, fn {key, value}, {:ok, acc} ->
+      if valid_switch?(key, value),
+        do: {:cont, {:ok, Map.put(acc, key, value)}},
+        else: {:halt, {:error, {:invalid_switch, key, value}}}
+    end)
+  end
+
+  defp valid_switch?(key, value) when key in [:send_on_change, :blank_pulse],
+    do: is_boolean(value)
+
+  defp valid_switch?(:max_rate_hz, value), do: is_nil(value) or (is_number(value) and value > 0)
+  defp valid_switch?(:refresh_ms, value), do: is_nil(value) or (is_integer(value) and value > 0)
+  defp valid_switch?(:blank_gpio, value), do: is_nil(value) or is_binary(value)
+  defp valid_switch?(_key, _value), do: false
+
+  defp apply_switches(state, changes) do
+    switches = Map.merge(state.switches, changes)
+
+    state
+    |> reopen_blank(state.switches.blank_gpio, switches.blank_gpio)
+    |> Map.put(:switches, switches)
+    |> schedule_refresh()
+  end
+
+  defp reopen_blank(state, label, label), do: state
+
+  defp reopen_blank(state, _old_label, new_label) do
+    if state.blank, do: Circuits.GPIO.close(state.blank)
+    # The chips are already showing a frame, so don't blank them.
+    %{state | blank: open_blank(new_label, 0), blanked: false}
+  end
+
+  # The TLC5947 takes up to 30 MHz on its own but only 15 MHz cascaded,
+  # and 25 MHz failed past chip 3 on the 9-chip :main ribbon chain
+  # (2026-04-17). 1 MHz matches the known-good Python bench config; a
+  # 9-chip frame is ~2.6 ms, well inside the 33 ms tick.
   @spi_speed_hz 1_000_000
+
+  # Kept from the April bench sessions: a wait between the transfer
+  # returning and XLAT. It was added for a suspected early return from the
+  # aux SPI driver, but spi-bcm2835aux doesn't complete a transfer until
+  # it has clocked in the last byte, which can't happen before the last
+  # bit has gone out. So it's a harmless precaution, not a fix. It
+  # busy-waits because Process.sleep/1 has a 1 ms floor.
+  @xlat_delay_us 100
 
   defp open_spi(spi_device) do
     case Circuits.SPI.open(spi_device, speed_hz: @spi_speed_hz) do
@@ -236,19 +537,61 @@ defmodule NeonPerceptron.Chain do
     end
   end
 
-  defp spi_transfer(spi, :hardware, xlat, data) do
-    Circuits.SPI.transfer!(spi, data)
-    # BCM2711 aux SPI (SPI1) returns from transfer! before the TX FIFO has
-    # fully drained onto MOSI — bench 2026-04-17 observed a uniform 36-bit
-    # (3-channel) shift on :main because XLAT fired while the last bits
-    # were still in flight. Classic SPI0 (:input_left) doesn't need this
-    # but pays a harmless ~100 µs. µs-precision busy-wait avoids BEAM's
-    # 1 ms Process.sleep floor (which produced visible frame jitter).
-    busy_wait_us(100)
-    pulse_xlat(xlat)
+  defp open_blank(nil, _initial_value), do: nil
+
+  defp open_blank(gpio_label, initial_value) do
+    case Circuits.GPIO.open(gpio_label, :output, initial_value: initial_value) do
+      {:ok, gpio} ->
+        gpio
+
+      {:error, reason} ->
+        Logger.warning(
+          "BLANK GPIO #{gpio_label} unavailable (#{inspect(reason)}), chain running without BLANK"
+        )
+
+        nil
+    end
   end
 
-  defp spi_transfer(_spi, :simulation, _xlat, _data), do: :ok
+  # Shifts `data` out, latches it as `latch` says, and returns what came
+  # back on MISO.
+  defp transmit(state, data, latch) do
+    received = spi_transfer(state, data)
+
+    state =
+      case resolve_latch(latch, state) do
+        :none -> state
+        latch -> state |> pulse_latch(latch) |> record_latch(data)
+      end
+
+    {received, state}
+  end
+
+  defp spi_transfer(%{mode: :hardware, spi: spi}, data), do: Circuits.SPI.transfer!(spi, data)
+  defp spi_transfer(%{mode: :simulation}, data), do: :binary.copy(<<0>>, byte_size(data))
+
+  defp pulse_latch(state, :xlat) do
+    busy_wait_us(@xlat_delay_us)
+    pulse_xlat(state.xlat)
+
+    if state.blanked do
+      Circuits.GPIO.write(state.blank, 0)
+    end
+
+    %{state | blanked: false}
+  end
+
+  defp pulse_latch(state, :blank_pulse) do
+    busy_wait_us(@xlat_delay_us)
+    Circuits.GPIO.write(state.blank, 1)
+    pulse_xlat(state.xlat)
+    Circuits.GPIO.write(state.blank, 0)
+    %{state | blanked: false}
+  end
+
+  defp record_latch(state, data) do
+    schedule_refresh(%{state | latched: data, latched_at: now_ms()})
+  end
 
   defp pulse_xlat(nil), do: :ok
 
@@ -269,6 +612,8 @@ defmodule NeonPerceptron.Chain do
       :ok
     end
   end
+
+  defp now_ms, do: System.monotonic_time(:millisecond)
 
   defp pubsub_available? do
     !!Process.whereis(NeonPerceptron.PubSub)
