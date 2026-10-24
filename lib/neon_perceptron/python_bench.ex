@@ -6,9 +6,12 @@ defmodule NeonPerceptron.PythonBench do
   abstractions on the same Nerves hardware, without needing to ship
   Python on the Nerves rootfs.
 
-  Drives a SINGLE TLC5947 chip on `:main` (the first chip in the
-  chain, MOSI-side). Packs bytes exactly the way Brendan's Python
-  does. No gamma correction, no reversal, no chain-wide rendering.
+  Drives chip 0 of `:main` (MOSI-side) with the RGB sweep. Packs
+  bytes for that chip exactly the way Brendan's Python does --- no
+  gamma correction, no reversal, no chain-wide rendering --- and
+  prepends 8 chips' worth of zeros so chips 1-8 latch dark each
+  frame (otherwise they cascade random shifts and visually drown out
+  chip 0; see comment on `@chain_chips`).
 
   ## Usage
 
@@ -38,11 +41,39 @@ defmodule NeonPerceptron.PythonBench do
   import Bitwise
 
   # Brendan's Python config, verbatim where possible.
+  #
+  # Two deliberate deviations from `brendan-spi-test.py`, matching the
+  # SPI envelope `Chain.ex` uses for `:main` so PythonBench and
+  # Chain.ex differ only in Elixir-side abstractions (gamma, reverse,
+  # chain rendering), not in SPI timing:
+  #
+  # 1. `@spi_speed_hz` is 1 MHz, not Brendan's 10 MHz. Brendan tests
+  #    on a single chip; we drive a 9-chip ribbon-linked chain off
+  #    the Pi 5 aux SPI. Chain.ex bench-tested 25 MHz failing past
+  #    chip 3 on this chain (commit 6993b9f's predecessor) and
+  #    settled on 1 MHz.
+  # 2. We busy-wait 100 µs between `Circuits.SPI.transfer!` and the
+  #    XLAT pulse to let the BCM aux-SPI TX FIFO drain (see
+  #    `Chain.spi_transfer/4` and commit 0859213). Without this, XLAT
+  #    fires while bytes are still in flight and the chip latches a
+  #    36-bit-shifted snapshot.
   @spi_device "spidev1.0"
-  @spi_speed_hz 10_000_000
+  @spi_speed_hz 1_000_000
   @xlat_gpio "GPIO18"
+  @fifo_drain_us 100
   @pwm_max 4095
   @num_channels 24
+
+  # `:main` has 9 daisy-chained TLC5947s. Chip 0 is closest to MOSI;
+  # chip 8 is at chain end. XLAT is global, so all chips latch
+  # simultaneously. If we send only 36 bytes (one chip's worth) into a
+  # 9-chip chain, chip 0 gets correct new data, but chips 1-8 each
+  # latch a snapshot of their upstream neighbour's previous GS register
+  # contents --- they cascade random shifts every frame and strobe
+  # visibly, making it look like chip 0 itself is flickering. To
+  # observe chip 0 in isolation we prepend 8 chips' worth of zeros so
+  # chips 1-8 latch all-zero (dark) each frame.
+  @chain_chips 9
 
   # PWM sweep parameters from brendan-spi-test.py lines 77-100.
   @initial_rgb %{r: 2048, g: 2048, b: 2048}
@@ -77,34 +108,48 @@ defmodule NeonPerceptron.PythonBench do
   so it can be called directly for one-shot tests.
   """
   def set_leds(spi, xlat, led_array) when length(led_array) == @num_channels do
-    buffer = pack(led_array)
+    # Bytes for chip 8 (farthest from MOSI) clock out first, bytes for
+    # chip 0 last. So zeros for chips 1..8 first, then chip 0 RGB last.
+    blanks = :binary.copy(<<0>>, (@chain_chips - 1) * 36)
+    buffer = blanks <> pack(led_array)
     Circuits.SPI.transfer!(spi, buffer)
-
-    # Brendan pulses XLAT HIGH, sleeps 1 µs, LOW. BEAM's finest
-    # sleep resolution is ~1 ms via :timer.sleep, but two back-to-back
-    # Circuits.GPIO.write calls already take longer than 1 µs, so
-    # :timer.sleep/1 is unnecessary --- we match his intent by just
-    # doing the two GPIO writes.
+    busy_wait_us(@fifo_drain_us)
     Circuits.GPIO.write(xlat, 1)
     Circuits.GPIO.write(xlat, 0)
     :ok
   end
 
-  # Byte-for-byte port of brendan-spi-test.py's `set_leds` packing
-  # loop (lines 44-63). Produces a 36-byte buffer for one TLC5947.
-  #
-  # Python reference:
-  #
-  #     buffer = [0] * 36
-  #     byte_idx = 35
-  #     for i in range(0, 23, 2):
-  #         val1 = min(led_array[i], 4096)
-  #         val2 = min(led_array[i+1], 4096)
-  #         buffer[byte_idx]   = (val1 & 0xFF)
-  #         buffer[byte_idx-1] = ((val1 >> 8) & 0x0F) | ((val2 << 4) & 0xF0)
-  #         buffer[byte_idx-2] = (val2 >> 4) & 0xFF
-  #         byte_idx -= 3
-  defp pack(leds) do
+  defp busy_wait_us(us) do
+    deadline = System.monotonic_time(:microsecond) + us
+    spin_until(deadline)
+  end
+
+  defp spin_until(deadline) do
+    if System.monotonic_time(:microsecond) < deadline do
+      spin_until(deadline)
+    else
+      :ok
+    end
+  end
+
+  @doc """
+  Pack a 24-element list of 12-bit PWM values into a 36-byte TLC5947
+  SPI buffer, byte-for-byte equivalent to `brendan-spi-test.py`'s
+  `set_leds` packing loop (lines 44-63):
+
+      buffer = [0] * 36
+      byte_idx = 35
+      for i in range(0, 23, 2):
+          val1 = min(led_array[i], 4096)
+          val2 = min(led_array[i+1], 4096)
+          buffer[byte_idx]   = (val1 & 0xFF)
+          buffer[byte_idx-1] = ((val1 >> 8) & 0x0F) | ((val2 << 4) & 0xF0)
+          buffer[byte_idx-2] = (val2 >> 4) & 0xFF
+          byte_idx -= 3
+
+  Public so the equivalence test can hit it without opening SPI.
+  """
+  def pack(leds) when length(leds) == @num_channels do
     # Python iterates i = 0, 2, 4, ..., 22 (pairs of channels), writing
     # into the buffer from the tail backward. Same effect in Elixir:
     # reduce over [{0,1}, {2,3}, ..., {22,23}] and build up the 36-byte
