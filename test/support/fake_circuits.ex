@@ -15,7 +15,9 @@ defmodule NeonPerceptron.FakeCircuits do
   A transfer reads back what the previous transfer on that bus sent, as a
   daisy chain whose length matches the frame would. Pass
   `readback: {:flip, byte_index}` to corrupt one bit of every read-back
-  byte at that index instead.
+  byte at that index instead. `fail_spi:` and `fail_gpio:` list bus names
+  and GPIO labels whose open fails, as when the device is missing or
+  another handle holds the line.
   """
 
   import ExUnit.Callbacks, only: [on_exit: 1]
@@ -26,7 +28,13 @@ defmodule NeonPerceptron.FakeCircuits do
       gpio: Application.get_env(:circuits_gpio, :default_backend)
     }
 
-    backend_opts = [recorder: self(), readback: Keyword.get(opts, :readback, :echo)]
+    backend_opts = [
+      recorder: self(),
+      readback: Keyword.get(opts, :readback, :echo),
+      fail_spi: Keyword.get(opts, :fail_spi, []),
+      fail_gpio: Keyword.get(opts, :fail_gpio, [])
+    ]
+
     Application.put_env(:circuits_spi, :default_backend, {__MODULE__.SPI, backend_opts})
     Application.put_env(:circuits_gpio, :default_backend, {__MODULE__.GPIO, backend_opts})
 
@@ -52,6 +60,14 @@ defmodule NeonPerceptron.FakeCircuits do
 
     @impl true
     def open(bus_name, options) do
+      if bus_name in Keyword.fetch!(options, :fail_spi) do
+        {:error, :not_found}
+      else
+        open_bus(bus_name, options)
+      end
+    end
+
+    defp open_bus(bus_name, options) do
       {:ok, last_sent} = Agent.start_link(fn -> nil end)
 
       {:ok,
@@ -84,9 +100,13 @@ defmodule NeonPerceptron.FakeCircuits do
 
     @impl true
     def open(label, direction, options) do
-      recorder = Keyword.fetch!(options, :recorder)
-      send(recorder, {:gpio_open, label, direction, Keyword.fetch!(options, :initial_value)})
-      {:ok, %__MODULE__{label: label, recorder: recorder}}
+      if label in Keyword.fetch!(options, :fail_gpio) do
+        {:error, :already_open}
+      else
+        recorder = Keyword.fetch!(options, :recorder)
+        send(recorder, {:gpio_open, label, direction, Keyword.fetch!(options, :initial_value)})
+        {:ok, %__MODULE__{label: label, recorder: recorder}}
+      end
     end
 
     @impl true

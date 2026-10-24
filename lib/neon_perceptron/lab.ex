@@ -46,6 +46,8 @@ defmodule NeonPerceptron.Lab do
   alias NeonPerceptron.{Board, Chain}
 
   @channels_per_board 24
+  @min_rate_hz 0.01
+  @max_rate_hz 1000
 
   def start_link(_opts), do: GenServer.start_link(__MODULE__, nil, name: __MODULE__)
 
@@ -102,6 +104,9 @@ defmodule NeonPerceptron.Lab do
   @doc """
   Stop the running condition and return its timing: ticks run, ticks
   skipped because the previous one overran, and the worst lateness.
+  Returns `{:error, :not_running}` if nothing is running (the Lab may
+  have restarted), and `{:error, {:condition_failed, reason}}` if the
+  condition stopped itself because a shift failed.
   """
   def stop, do: GenServer.call(__MODULE__, :stop)
 
@@ -110,13 +115,14 @@ defmodule NeonPerceptron.Lab do
   finding a chain's BLANK line: if driving a pin high darkens a chain,
   it's that chain's BLANK.
   """
-  def probe_gpio(label, value) when value in [0, 1],
+  def probe_gpio(label, value) when is_binary(label) and value in [0, 1],
     do: GenServer.call(__MODULE__, {:probe_gpio, label, value})
 
   @doc """
   Stop driving a GPIO taken by `probe_gpio/2`, leaving it an input.
   """
-  def release_gpio(label), do: GenServer.call(__MODULE__, {:release_gpio, label})
+  def release_gpio(label) when is_binary(label),
+    do: GenServer.call(__MODULE__, {:release_gpio, label})
 
   @doc """
   Shift `frames` random frames through a chain without latching and
@@ -125,7 +131,7 @@ defmodule NeonPerceptron.Lab do
   wire MISO floats, and the counts of all-zero and all-ones read-backs
   usually show it.
   """
-  def readback(chain, frames \\ 16) when is_integer(frames) and frames > 0,
+  def readback(chain, frames \\ 16) when is_integer(frames) and frames in 1..1000,
     do: GenServer.call(__MODULE__, {:readback, chain, frames}, 30_000)
 
   @doc """
@@ -163,7 +169,7 @@ defmodule NeonPerceptron.Lab do
   defp jsonable(term), do: inspect(term)
 
   @impl true
-  def init(nil), do: {:ok, %{frames: %{}, condition: nil, probes: %{}}}
+  def init(nil), do: {:ok, %{frames: %{}, condition: nil, failed: nil, probes: %{}}}
 
   @impl true
   def handle_call(:status, _from, state) do
@@ -182,7 +188,7 @@ defmodule NeonPerceptron.Lab do
     state = stop_condition(state)
     Enum.each(state.probes, fn {label, gpio} -> float_gpio(label, gpio) end)
     Enum.each(chain_ids(), &Chain.release/1)
-    {:reply, :ok, %{state | frames: %{}, probes: %{}}}
+    {:reply, :ok, %{state | frames: %{}, probes: %{}, failed: nil}}
   end
 
   def handle_call({:fill, which, level}, _from, state) do
@@ -220,6 +226,7 @@ defmodule NeonPerceptron.Lab do
 
   def handle_call({:set_frame, chain, levels}, _from, state) do
     with {:ok, [^chain]} <- targets(chain),
+         true <- is_list(levels) || {:error, :bad_frame},
          :ok <- Enum.reduce_while(levels, :ok, fn l, :ok -> halt_on_error(check_level(l)) end) do
       latch_frames(state, %{chain => levels})
     else
@@ -247,14 +254,18 @@ defmodule NeonPerceptron.Lab do
           ref: make_ref()
         }
 
-        {:reply, :ok, %{state | condition: schedule_tick(condition)}}
+        {:reply, :ok, %{state | condition: schedule_tick(condition), failed: nil}}
 
       error ->
         {:reply, error, state}
     end
   end
 
-  def handle_call(:stop, _from, %{condition: nil} = state), do: {:reply, :not_running, state}
+  def handle_call(:stop, _from, %{condition: nil, failed: nil} = state),
+    do: {:reply, {:error, :not_running}, state}
+
+  def handle_call(:stop, _from, %{condition: nil, failed: failed} = state),
+    do: {:reply, {:error, {:condition_failed, failed}}, %{state | failed: nil}}
 
   def handle_call(:stop, _from, %{condition: condition} = state) do
     summary = %{
@@ -307,8 +318,21 @@ defmodule NeonPerceptron.Lab do
   @impl true
   def handle_info({:tick, ref}, %{condition: %{ref: ref} = condition} = state) do
     now = now_ms()
-    run_tick(condition, state.frames, (now - condition.started_at) / 1000)
 
+    case run_tick(condition, state.frames, (now - condition.started_at) / 1000) do
+      :ok ->
+        {:noreply, %{state | condition: next_tick(condition, now)}}
+
+      # A condition that can't shift isn't the condition the camera is
+      # recording, so stop it; stop/0 reports why.
+      {:error, reason} ->
+        {:noreply, %{state | condition: nil, failed: {condition.spec.kind, reason}}}
+    end
+  end
+
+  def handle_info({:tick, _stale_ref}, state), do: {:noreply, state}
+
+  defp next_tick(condition, now) do
     condition = %{
       condition
       | ticks: condition.ticks + 1,
@@ -326,18 +350,14 @@ defmodule NeonPerceptron.Lab do
         skipped: condition.skipped + behind
     }
 
-    {:noreply, %{state | condition: schedule_tick(condition)}}
+    schedule_tick(condition)
   end
 
-  def handle_info({:tick, _stale_ref}, state), do: {:noreply, state}
+  defp run_tick(%{spec: %{kind: :relatch} = spec}, frames, _seconds),
+    do: shift_each(spec.chains, frames, spec.latch)
 
-  defp run_tick(%{spec: %{kind: :relatch} = spec}, frames, _seconds) do
-    for id <- spec.chains, do: Chain.shift(id, Map.fetch!(frames, id), spec.latch)
-  end
-
-  defp run_tick(%{spec: %{kind: :reshift} = spec}, frames, _seconds) do
-    for id <- spec.chains, do: Chain.shift(id, Map.fetch!(frames, id), :none)
-  end
+  defp run_tick(%{spec: %{kind: :reshift} = spec}, frames, _seconds),
+    do: shift_each(spec.chains, frames, :none)
 
   defp run_tick(%{spec: %{kind: :wobble} = spec}, frames, seconds) do
     index = spec.chip * @channels_per_board + spec.channel
@@ -345,16 +365,27 @@ defmodule NeonPerceptron.Lab do
     base = Enum.at(levels, index)
     level = base * (1 + spec.depth * :math.sin(2 * :math.pi() * spec.freq_hz * seconds))
     level = level |> round() |> max(0) |> min(Board.gs_max())
-    Chain.shift(spec.chain, List.replace_at(levels, index, level), spec.latch)
+    shift_each([spec.chain], %{spec.chain => List.replace_at(levels, index, level)}, spec.latch)
+  end
+
+  defp shift_each(chains, frames, latch) do
+    Enum.find_value(chains, :ok, fn id ->
+      case Chain.shift(id, Map.fetch!(frames, id), latch) do
+        {:ok, _transfer} -> nil
+        error -> error
+      end
+    end)
   end
 
   defp validate_condition(%{kind: kind, rate_hz: rate} = spec, state)
-       when kind in [:relatch, :reshift] and is_number(rate) and rate > 0 do
+       when kind in [:relatch, :reshift] and is_number(rate) and rate >= @min_rate_hz and
+              rate <= @max_rate_hz do
     chains = Map.get(spec, :chains, Map.keys(state.frames))
     latch = Map.get(spec, :latch, :xlat)
     jitter = Map.get(spec, :jitter_ms, 0)
 
     cond do
+      not (is_list(chains) and Enum.all?(chains, &is_atom/1)) -> {:error, {:bad_chains, chains}}
       chains == [] -> {:error, :no_frames}
       not Enum.all?(chains, &Map.has_key?(state.frames, &1)) -> {:error, :no_frame_for_chain}
       latch not in [:xlat, :blank_pulse] -> {:error, {:bad_latch, latch}}
@@ -375,10 +406,10 @@ defmodule NeonPerceptron.Lab do
 
     with {:ok, levels} <- Map.fetch(state.frames, chain) |> or_error(:no_frame_for_chain),
          :ok <- check_position(chain, chip, channel),
-         true <-
-           Enum.at(levels, chip * @channels_per_board + channel) > 0 || {:error, :dark_channel},
-         true <-
-           (is_number(freq) and freq > 0 and is_number(rate) and rate > 0) || {:error, :bad_rate},
+         base = Enum.at(levels, chip * @channels_per_board + channel),
+         true <- base > 0 || {:error, :dark_channel},
+         true <- base * (1 + depth) <= Board.gs_max() || {:error, :wobble_clips},
+         true <- valid_wobble_rates?(freq, rate) || {:error, :bad_rate},
          true <- latch in [:xlat, :blank_pulse] || {:error, {:bad_latch, latch}},
          true <- latch == :xlat || blank_gpio?(chain) || {:error, :no_blank_gpio} do
       {:ok,
@@ -410,6 +441,12 @@ defmodule NeonPerceptron.Lab do
   end
 
   defp valid_jitter?(jitter, rate), do: is_number(jitter) and jitter >= 0 and jitter < 500 / rate
+
+  # The wobble needs at least two updates per cycle.
+  defp valid_wobble_rates?(freq, rate) do
+    is_number(freq) and is_number(rate) and rate >= @min_rate_hz and rate <= @max_rate_hz and
+      freq > 0 and freq <= rate / 2
+  end
 
   defp stop_condition(state), do: %{state | condition: nil}
 

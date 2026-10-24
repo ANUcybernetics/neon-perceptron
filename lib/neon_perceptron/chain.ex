@@ -144,7 +144,13 @@ defmodule NeonPerceptron.Chain do
 
     {spi, mode} = open_spi(config.spi_device)
     xlat = open_xlat(config[:xlat_gpio])
-    blank = open_blank(switches.blank_gpio, 1)
+
+    # A BLANK line that won't open is reported as not driven.
+    {blank, switches} =
+      case open_blank(switches.blank_gpio, 1) do
+        {:ok, blank} -> {blank, switches}
+        {:error, _reason} -> {nil, %{switches | blank_gpio: nil}}
+      end
 
     state = %{
       id: config.id,
@@ -187,8 +193,15 @@ defmodule NeonPerceptron.Chain do
   end
 
   def handle_info({:timeout, timer, :refresh}, %{refresh_timer: timer} = state) do
-    {_received, state} = transmit(%{state | refresh_timer: nil}, state.latched, :auto)
-    {:noreply, count(state, :refreshed)}
+    state = %{state | refresh_timer: nil}
+
+    # A queued frame is about to latch, and re-arms the refresh when it does.
+    if state.pending do
+      {:noreply, state}
+    else
+      {_received, state} = transmit(state, state.latched, :auto)
+      {:noreply, count(state, :refreshed)}
+    end
   end
 
   def handle_info(_msg, state), do: {:noreply, state}
@@ -246,7 +259,7 @@ defmodule NeonPerceptron.Chain do
   """
   @spec shift(atom(), [non_neg_integer()], latch()) ::
           {:ok, %{sent: binary(), received: binary()}}
-          | {:error, :bad_length | :no_blank_gpio}
+          | {:error, :bad_length | :bad_level | :no_blank_gpio}
   def shift(chain_id, gs_values, latch \\ :auto)
       when is_list(gs_values) and latch in [:auto, :xlat, :blank_pulse, :none] do
     GenServer.call(via(chain_id), {:shift, gs_values, latch})
@@ -254,10 +267,11 @@ defmodule NeonPerceptron.Chain do
 
   @doc """
   Change switches at runtime (see the moduledoc). Keys not given keep
-  their current values.
+  their current values. If a new `:blank_gpio` won't open (another
+  handle has it, or the label is wrong), nothing changes.
   """
   @spec configure(atom(), keyword() | map()) ::
-          :ok | {:error, {:invalid_switch, atom(), term()}}
+          :ok | {:error, {:invalid_switch, atom(), term()} | {:blank_gpio, term()}}
   def configure(chain_id, switches) do
     GenServer.call(via(chain_id), {:configure, Map.new(switches)})
   end
@@ -297,7 +311,7 @@ defmodule NeonPerceptron.Chain do
 
     if length(channel_values) == expected do
       data = channel_values |> Enum.reverse() |> Board.encode()
-      {_received, state} = transmit(state, data, :auto)
+      {_received, state} = state |> cancel_pending() |> transmit(data, :auto)
       {:reply, :ok, state}
     else
       {:reply, {:error, :bad_length}, state}
@@ -307,7 +321,7 @@ defmodule NeonPerceptron.Chain do
   @impl true
   def handle_call({:push_oversize, channel_values}, _from, state) do
     data = channel_values |> Enum.reverse() |> Board.encode()
-    {_received, state} = transmit(state, data, :auto)
+    {_received, state} = state |> cancel_pending() |> transmit(data, :auto)
     # What the chips latched isn't a frame of this chain any more, so there's
     # nothing to compare against or refresh.
     {:reply, :ok, %{cancel_timer(state, :refresh_timer) | latched: nil}}
@@ -321,11 +335,15 @@ defmodule NeonPerceptron.Chain do
       length(gs_values) != length(state.boards) * Board.channels_per_board() ->
         {:reply, {:error, :bad_length}, state}
 
+      not Enum.all?(gs_values, &(is_integer(&1) and &1 >= 0 and &1 <= Board.gs_max())) ->
+        {:reply, {:error, :bad_level}, state}
+
       latch == :blank_pulse and state.blank == nil ->
         {:reply, {:error, :no_blank_gpio}, state}
 
       true ->
         data = gs_values |> Enum.reverse() |> Board.pack()
+        state = if latch == :none, do: state, else: cancel_pending(state)
         {received, state} = transmit(state, data, latch)
         {:reply, {:ok, %{sent: data, received: received}}, state}
     end
@@ -333,8 +351,10 @@ defmodule NeonPerceptron.Chain do
 
   @impl true
   def handle_call({:configure, changes}, _from, state) do
-    case validate_switches(changes) do
-      {:ok, changes} -> {:reply, :ok, apply_switches(state, changes)}
+    with {:ok, changes} <- validate_switches(changes),
+         {:ok, configured} <- apply_switches(state, changes) do
+      {:reply, :ok, configured}
+    else
       {:error, _reason} = error -> {:reply, error, state}
     end
   end
@@ -415,14 +435,14 @@ defmodule NeonPerceptron.Chain do
   defp rate_limited?(%{latched_at: nil}), do: false
   defp rate_limited?(state), do: now_ms() < next_slot(state)
 
-  defp next_slot(state), do: state.latched_at + ceil(1000 / state.switches.max_rate_hz)
+  defp next_slot(state), do: state.latched_at + 1000 / state.switches.max_rate_hz
 
   defp queue(state, data) do
     state = if state.pending, do: count(state, :coalesced), else: state
 
     timer =
       state.pending_timer ||
-        :erlang.start_timer(next_slot(state), self(), :send_pending, abs: true)
+        :erlang.start_timer(ceil(next_slot(state)), self(), :send_pending, abs: true)
 
     %{state | pending: data, pending_timer: timer}
   end
@@ -480,18 +500,25 @@ defmodule NeonPerceptron.Chain do
   defp apply_switches(state, changes) do
     switches = Map.merge(state.switches, changes)
 
-    state
-    |> reopen_blank(state.switches.blank_gpio, switches.blank_gpio)
-    |> Map.put(:switches, switches)
-    |> schedule_refresh()
+    with {:ok, state} <- reopen_blank(state, state.switches.blank_gpio, switches.blank_gpio) do
+      {:ok, schedule_refresh(%{state | switches: switches})}
+    end
   end
 
-  defp reopen_blank(state, label, label), do: state
+  defp reopen_blank(state, label, label), do: {:ok, state}
 
+  # Opens the new line before letting go of the old one, so a failure leaves
+  # the chain as it was. The chips are already showing a frame, so the new
+  # line starts low.
   defp reopen_blank(state, _old_label, new_label) do
-    if state.blank, do: Circuits.GPIO.close(state.blank)
-    # The chips are already showing a frame, so don't blank them.
-    %{state | blank: open_blank(new_label, 0), blanked: false}
+    case open_blank(new_label, 0) do
+      {:ok, blank} ->
+        if state.blank, do: Circuits.GPIO.close(state.blank)
+        {:ok, %{state | blank: blank, blanked: false}}
+
+      {:error, reason} ->
+        {:error, {:blank_gpio, reason}}
+    end
   end
 
   # The TLC5947 takes up to 30 MHz on its own but only 15 MHz cascaded,
@@ -538,31 +565,32 @@ defmodule NeonPerceptron.Chain do
     end
   end
 
-  defp open_blank(nil, _initial_value), do: nil
+  defp open_blank(nil, _initial_value), do: {:ok, nil}
 
   defp open_blank(gpio_label, initial_value) do
     case Circuits.GPIO.open(gpio_label, :output, initial_value: initial_value) do
       {:ok, gpio} ->
-        gpio
+        {:ok, gpio}
 
       {:error, reason} ->
         Logger.warning(
           "BLANK GPIO #{gpio_label} unavailable (#{inspect(reason)}), chain running without BLANK"
         )
 
-        nil
+        {:error, reason}
     end
   end
 
   # Shifts `data` out, latches it as `latch` says, and returns what came
   # back on MISO.
   defp transmit(state, data, latch) do
+    started_at = now_ms()
     received = spi_transfer(state, data)
 
     state =
       case resolve_latch(latch, state) do
         :none -> state
-        latch -> state |> pulse_latch(latch) |> record_latch(data)
+        latch -> state |> pulse_latch(latch) |> record_latch(data, started_at)
       end
 
     {received, state}
@@ -570,6 +598,10 @@ defmodule NeonPerceptron.Chain do
 
   defp spi_transfer(%{mode: :hardware, spi: spi}, data), do: Circuits.SPI.transfer!(spi, data)
   defp spi_transfer(%{mode: :simulation}, data), do: :binary.copy(<<0>>, byte_size(data))
+
+  # Without SPI the shift registers hold whatever they powered up with, so
+  # don't latch it.
+  defp pulse_latch(%{mode: :simulation} = state, _latch), do: state
 
   defp pulse_latch(state, :xlat) do
     busy_wait_us(@xlat_delay_us)
@@ -590,8 +622,8 @@ defmodule NeonPerceptron.Chain do
     %{state | blanked: false}
   end
 
-  defp record_latch(state, data) do
-    schedule_refresh(%{state | latched: data, latched_at: now_ms()})
+  defp record_latch(state, data, started_at) do
+    schedule_refresh(%{state | latched: data, latched_at: started_at})
   end
 
   defp pulse_xlat(nil), do: :ok

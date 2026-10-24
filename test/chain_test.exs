@@ -288,6 +288,53 @@ defmodule NeonPerceptron.ChainSwitchesTest do
     assert {:error, {:invalid_switch, :speed, 1}} = Chain.configure(chain, speed: 1)
   end
 
+  test "a BLANK GPIO that won't open is reported as not driven" do
+    FakeCircuits.install(fail_gpio: ["GPIO27"])
+    chain = start_chain(:blank_busy, %{blank_gpio: "GPIO27"})
+
+    assert Chain.status(chain).switches.blank_gpio == nil
+
+    assert {:error, {:blank_gpio, :already_open}} =
+             Chain.configure(chain, blank_gpio: "GPIO27", blank_pulse: true)
+
+    assert %{blank_gpio: nil, blank_pulse: false} = Chain.status(chain).switches
+    assert :ok = Chain.configure(chain, blank_gpio: "GPIO17")
+    assert_receive {:gpio_open, "GPIO17", :output, 0}
+  end
+
+  test "a direct push replaces a frame waiting on the rate cap" do
+    chain = start_chain(:capped_push, %{max_rate_hz: 10})
+
+    Chain.update_sync(chain, @half)
+    Chain.update_sync(chain, @full)
+    :ok = Chain.push_raw(chain, List.duplicate(0.25, 24))
+
+    assert_latched(frame(@half))
+    assert_latched(frame(List.duplicate(0.25, 24)))
+    refute_receive {:spi, _, _}, 200
+  end
+
+  test "without SPI, updates don't pulse XLAT or drop BLANK" do
+    FakeCircuits.install(fail_spi: ["spidev9.9"])
+
+    config = %{
+      id: :no_spi,
+      spi_device: "spidev9.9",
+      xlat_gpio: "GPIO8",
+      blank_gpio: "GPIO17",
+      boards: [{"input", 0}],
+      render_fn: nil,
+      render_frame_fn: & &1,
+      pubsub_subscribe: false
+    }
+
+    start_supervised!({Chain, config}, id: :no_spi)
+    assert Chain.status(:no_spi).mode == :simulation
+
+    Chain.update_sync(:no_spi, @half)
+    refute_receive {:gpio, _, _}, 50
+  end
+
   test "a held chain ignores updates until released" do
     chain = start_chain(:held)
 
@@ -315,6 +362,7 @@ defmodule NeonPerceptron.ChainSwitchesTest do
     refute_receive {:gpio, _, _}, 50
 
     assert {:error, :bad_length} = Chain.shift(chain, [0], :xlat)
+    assert {:error, :bad_level} = Chain.shift(chain, List.duplicate(4096, 24), :xlat)
     assert {:error, :no_blank_gpio} = Chain.shift(chain, first, :blank_pulse)
   end
 end

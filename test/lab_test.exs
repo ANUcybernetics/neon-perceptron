@@ -164,6 +164,36 @@ defmodule NeonPerceptron.LabTest do
     Lab.stop()
   end
 
+  test "a condition whose shifts fail stops, and stop/0 says why" do
+    :ok = Lab.fill(1000)
+    :ok = Lab.configure(:lab_a, blank_gpio: "GPIO17")
+    :ok = Lab.start(%{kind: :relatch, rate_hz: 50, latch: :blank_pulse, chains: [:lab_a]})
+
+    :ok = Lab.configure(:lab_a, blank_gpio: nil)
+    Process.sleep(60)
+
+    assert {:error, {:condition_failed, {:relatch, :no_blank_gpio}}} = Lab.stop()
+    assert {:error, :not_running} = Lab.stop()
+  end
+
+  test "conditions that can't run as asked are refused" do
+    :ok = Lab.light_one(:lab_a, 0, 5, 4000)
+
+    assert {:error, {:bad_condition, _}} = Lab.start(%{kind: :relatch, rate_hz: 1.0e-12})
+
+    assert {:error, {:bad_chains, :lab_a}} =
+             Lab.start(%{kind: :relatch, rate_hz: 30, chains: :lab_a})
+
+    wobble = %{kind: :wobble, chain: :lab_a, chip: 0, channel: 5, depth: 0.05}
+    assert {:error, :wobble_clips} = Lab.start(wobble)
+
+    assert {:error, :bad_rate} =
+             Lab.start(%{wobble | depth: 0.01} |> Map.merge(%{freq_hz: 20, rate_hz: 30}))
+
+    assert :ok = Lab.start(%{wobble | depth: 0.01})
+    assert %{kind: :wobble} = Lab.stop()
+  end
+
   test "probe_gpio drives a pin until it is released as an input" do
     assert :ok = Lab.probe_gpio("GPIO22", 1)
     assert_receive {:gpio_open, "GPIO22", :output, 1}
