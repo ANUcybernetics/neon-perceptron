@@ -70,3 +70,13 @@ description = "OTA upload LED firmware. Usage: HOST=nerves.local mise run upload
 depends = ["firmware:leds-rpi5"]
 env = { MIX_TARGET = "rpi5", MIX_ENV = "prod" }
 run = "mix upload $HOST"
+
+[tasks.rig]
+description = "Run the webcam rig. Usage: mise run rig -- map"
+dir = "rig"
+run = "uv run neon-rig"
+
+[tasks."rig:check"]
+description = "Lint, type-check and test the webcam rig"
+dir = "rig"
+run = "uv run ruff check . && uv run ruff format --check . && uvx ty check && uv run pytest"
