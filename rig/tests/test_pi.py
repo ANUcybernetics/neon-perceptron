@@ -40,7 +40,8 @@ def test_calls_become_lab_expressions_wrapped_in_reply() -> None:
         ),
         (
             "NeonPerceptron.Lab.reply(NeonPerceptron.Lab.start(%{kind: :wobble, chain: :main, "
-            "chip: 6, channel: 18, depth: 0.01, freq_hz: 5.0, rate_hz: 30.0, latch: :xlat}))"
+            "chip: 6, channel: 18, depth: 0.01, freq_hz: 5.0, rate_hz: 30.0, latch: :xlat, "
+            "jitter_ms: 0.0}))"
         ),
         (
             "NeonPerceptron.Lab.reply(NeonPerceptron.Lab.configure(:main, "
@@ -76,10 +77,30 @@ def test_a_complete_reply_wins_over_a_lost_exit_status() -> None:
 
 
 def test_elixir_literals() -> None:
-    assert elixir(1e-5) == "0.00001"
+    assert elixir(1e-5) == "1.0e-5"
+    assert elixir(1e16) == "1.0e16"
     assert elixir(2.0) == "2.0"
+    assert elixir(0.01) == "0.01"
+    with pytest.raises(ValueError):
+        elixir(float("nan"))
     assert elixir([Atom("a"), None, False]) == "[:a, nil, false]"
     with pytest.raises(ValueError):
         elixir('GPIO17"); System.halt(')
     with pytest.raises(ValueError):
         Atom("Main")
+
+
+def test_text_after_the_reply_on_its_line_is_ignored() -> None:
+    pi = SshPi("nerves.local", runner=FakeSsh('LAB {"ok":{"ticks":3}} trailing'))
+
+    assert pi.stop() == {"ticks": 3}
+
+
+def test_a_failed_connection_is_tried_once_more() -> None:
+    replies = iter([("", 255), ('LAB {"ok":{"ticks":4}}', 0)])
+
+    def flaky(argv: list[str], **_options: Any) -> subprocess.CompletedProcess[str]:
+        stdout, code = next(replies)
+        return subprocess.CompletedProcess(argv, code, stdout, "")
+
+    assert SshPi("nerves.local", runner=flaky).stop() == {"ticks": 4}

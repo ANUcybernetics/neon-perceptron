@@ -71,32 +71,35 @@ def locate(
     key: Key,
     lit: np.ndarray,
     dark: np.ndarray,
-    noise: float,
+    noise: np.ndarray,
     lit_max: np.ndarray,
     min_snr: float = 8.0,
     keep_fraction: float = 0.2,
 ) -> tuple[Region, tuple[np.ndarray, np.ndarray] | None]:
     """Find the region one lit channel adds to the image.
 
-    `lit` and `dark` are mean linear BGR images, `noise` the standard
-    deviation of one pixel of a mean luminance image, and `lit_max` the raw
-    per-pixel maximum over the lit frames (for spotting saturation). Pixels
-    above `keep_fraction` of the peak, in connected pieces that themselves
-    reach half the peak, form the region. Returns the region and its mask as
-    flat pixel indices with weights summing to one, or no mask if the channel
-    didn't light anything above `min_snr` times the noise.
+    `lit` and `dark` are mean linear BGR images, `noise` the per-pixel noise of
+    their smoothed luminance difference (see `experiments.noise_map`), and
+    `lit_max` the raw per-pixel maximum over the lit frames, for spotting
+    saturation. The region is the pixels above `keep_fraction` of the
+    brightest significant pixel and at least half `min_snr` above their noise,
+    in connected pieces that themselves reach half that peak. Returns the
+    region and its mask as flat pixel indices with weights summing to one, or
+    no mask if no pixel rose `min_snr` times above its noise.
     """
     chain, chip, channel = key
     diff = lit - dark
     lum = cv2.GaussianBlur(diff.sum(axis=2), (3, 3), 0)
-    peak = float(lum.max())
-    snr = peak / noise if noise > 0 else float("inf")
+    z = lum / noise
+    snr = float(z.max())
     if snr < min_snr:
-        return Region(
-            chain=chain, chip=chip, channel=channel, present=False, peak=peak, snr=snr
-        ), None
+        region = Region(
+            chain=chain, chip=chip, channel=channel, present=False, peak=0.0, snr=snr
+        )
+        return region, None
 
-    above = (lum >= keep_fraction * peak).astype(np.uint8)
+    peak = float(lum[z >= min_snr].max())
+    above = ((lum >= keep_fraction * peak) & (z >= min_snr / 2)).astype(np.uint8)
     count, labels = cv2.connectedComponents(above, connectivity=8)
     keep = np.zeros_like(above, dtype=bool)
     for label in range(1, count):

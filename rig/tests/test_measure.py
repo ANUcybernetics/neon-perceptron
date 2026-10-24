@@ -41,3 +41,22 @@ def test_dropped_frames_are_counted_and_filled_in() -> None:
     assert dropped == 3
     assert len(grid) == len(times)
     np.testing.assert_allclose(filled, values, rtol=1e-6)
+
+
+def test_a_duplicated_frame_doesnt_cancel_a_dropped_one() -> None:
+    times, values = series(0.0, 1.0, 0.0)
+    times = np.insert(np.delete(times, [20, 21]), 40, times[40] + 0.002)
+    values = np.interp(times, *series(0.0, 1.0, 0.0))
+
+    _, _, dropped = uniform(times, values)
+
+    assert dropped == 2
+
+
+def test_band_rms_counts_15_hz_once_and_ignores_slow_drift() -> None:
+    times = np.arange(0, 10, 1 / 30)
+    alternating = 100 * (1 + 0.01 * (-1.0) ** np.arange(len(times)))
+    drifting = 100 * (1 + 0.01 * np.sin(2 * np.pi * 0.2 * times))
+
+    assert abs(flicker(times, alternating).band_rms - 0.01) < 0.001
+    assert flicker(times, drifting).band_rms < 0.002

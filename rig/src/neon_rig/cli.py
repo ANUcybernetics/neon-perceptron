@@ -6,7 +6,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import cv2
 import numpy as np
@@ -21,7 +21,15 @@ from neon_rig.camera import (
     parse_controls,
     v4l2_ctl,
 )
-from neon_rig.experiments import Rig, blank_search, calibrate, flicker_suite, map_leds
+from neon_rig.experiments import (
+    Rig,
+    Series,
+    blank_search,
+    calibrate,
+    crowded,
+    flicker_suite,
+    map_leds,
+)
 from neon_rig.leds import LedMap, annotate
 from neon_rig.pi import SshPi
 
@@ -70,10 +78,25 @@ def write_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2, default=str))
 
 
+def save_series(directory: Path, series: list[Series]) -> None:
+    """Every capture's frame times and region brightness, and the Pi's timing,
+    so a run can be analysed again."""
+    arrays: dict[str, np.ndarray] = {}
+    for index, captured in enumerate(series):
+        arrays[f"{index}/times"] = captured.times
+        arrays[f"{index}/values"] = captured.values
+    np.savez_compressed(directory / "series.npz", **cast(Any, arrays))
+    write_json(
+        directory / "series.json",
+        [{"name": s.name, "keys": s.keys, "timing": s.timing} for s in series],
+    )
+
+
 @contextmanager
 def rig(host: str, device: str, exposure_ms: float, gamma: float) -> Generator[Rig]:
     """The real rig. Hands the chains back to the build afterwards, so the
-    installation doesn't stay frozen on the last test frame."""
+    installation doesn't stay frozen on the last test frame; save results
+    inside the block, before that."""
     pi = SshPi(host)
     camera = V4l2Camera(device, settings=Settings(exposure_ms=exposure_ms))
     try:
@@ -145,10 +168,10 @@ def map_command(
     directory = run_dir("map")
     with rig(host, device, exposure_ms, gamma) as setup:
         led_map, lit = map_leds(setup, level, frames)
-    led_map.save(directory)
-    lit_8bit = to_8bit(lit, gamma)
-    cv2.imwrite(str(directory / "lit.png"), lit_8bit)
-    cv2.imwrite(str(directory / "annotated.png"), annotate(led_map, lit_8bit))
+        led_map.save(directory)
+        lit_8bit = to_8bit(lit, gamma)
+        cv2.imwrite(str(directory / "lit.png"), lit_8bit)
+        cv2.imwrite(str(directory / "annotated.png"), annotate(led_map, lit_8bit))
     present = led_map.present()
     for region in present:
         logger.info(
@@ -165,6 +188,12 @@ def map_command(
         len(led_map.regions),
         directory,
     )
+    if suspects := crowded(led_map):
+        logger.warning(
+            "These sit on another chip's region, so may be a reflection or a "
+            "screen rather than their LED; check annotated.png: {}",
+            ", ".join(region.label for region in suspects),
+        )
 
 
 @app.command()
@@ -175,15 +204,19 @@ def suite(
     gamma: Gamma = 2.2,
     level: Level = 4095,
     seconds: Seconds = 10.0,
+    warmup_s: Annotated[
+        float, typer.Option(min=0.0, help="Settling time after lighting up.")
+    ] = 20.0,
     map_dir: MapDir = None,
 ) -> None:
-    """Flicker of every channel: static, re-latched at 30 and 10 Hz, re-shifted at 30 Hz, and BLANK-pulsed if BLANK is configured (AC #6)."""
+    """Flicker of every channel: static, re-latched at 30 and 10 Hz, re-shifted at 30 Hz, and BLANK-pulsed where BLANK is configured (AC #6)."""
     led_map = LedMap.load(map_dir or latest_map())
     directory = run_dir("suite")
     with rig(host, device, exposure_ms, gamma) as setup:
-        result = flicker_suite(setup, led_map, level, seconds)
-    result.table.write_parquet(directory / "regions.parquet")
-    result.summary.write_csv(directory / "summary.csv")
+        result = flicker_suite(setup, led_map, level, seconds, warmup_s)
+        result.table.write_parquet(directory / "regions.parquet")
+        result.summary.write_csv(directory / "summary.csv")
+        save_series(directory, result.series)
     logger.info("Summary (rms and dip are fractions of the mean):\n{}", result.summary)
 
 
@@ -199,7 +232,10 @@ def calibrate_command(
     ] = None,
     depth: Annotated[float, typer.Option(min=0.001, max=0.5)] = 0.01,
     freq_hz: Annotated[float, typer.Option(min=0.5, max=14.0)] = 5.0,
-    seconds: Seconds = 10.0,
+    seconds: Seconds = 20.0,
+    warmup_s: Annotated[
+        float, typer.Option(min=0.0, help="Settling time after lighting up.")
+    ] = 20.0,
     map_dir: MapDir = None,
 ) -> None:
     """The noise floor of a static frame, and whether a small injected wobble on one channel shows up (AC #4)."""
@@ -210,22 +246,41 @@ def calibrate_command(
         key = (chain, int(chip), int(channel))
     directory = run_dir("calibrate")
     with rig(host, device, exposure_ms, gamma) as setup:
-        result = calibrate(setup, led_map, level, key, depth, freq_hz, seconds)
-    write_json(
-        directory / "result.json",
-        {
-            "target": result.target,
-            "level": result.level,
-            "depth": result.depth,
-            "freq_hz": result.freq_hz,
-            "floor_rms_median": result.floor_rms_median,
-            "floor_rms_p90": result.floor_rms_p90,
-            "steady": {"amplitude": result.steady.amplitude, "snr": result.steady.snr},
-            "wobble": {"amplitude": result.wobble.amplitude, "snr": result.wobble.snr},
-            "gain": result.gain,
-            "detected": result.detected,
-        },
-    )
+        result = calibrate(
+            setup,
+            led_map,
+            level,
+            key,
+            depth,
+            freq_hz,
+            seconds=seconds,
+            warmup_s=warmup_s,
+        )
+        write_json(
+            directory / "result.json",
+            {
+                "target": result.target,
+                "level": result.level,
+                "depth": result.depth,
+                "freq_hz": result.freq_hz,
+                "fps": result.fps,
+                "floor_rms_median": result.floor_rms_median,
+                "floor_rms_p90": result.floor_rms_p90,
+                "steady": {
+                    "amplitude": result.steady.amplitude,
+                    "snr": result.steady.snr,
+                },
+                "wobble": {
+                    "amplitude": result.wobble.amplitude,
+                    "snr": result.wobble.snr,
+                },
+                "gain": result.gain,
+                "expected_gain": result.expected_gain,
+                "residual": result.residual,
+                "detected": result.detected,
+            },
+        )
+        save_series(directory, list(result.series))
     logger.info(
         "Static floor: median rms {:.3%}, 90th percentile {:.3%}",
         result.floor_rms_median,
@@ -240,6 +295,14 @@ def calibrate_command(
         result.wobble.snr,
         result.steady.amplitude,
         "detected" if result.detected else "NOT detected",
+    )
+    logger.info(
+        "Gain {:.2f} against {:.2f} expected, so the camera's response is off by "
+        "{:.2f}; camera ran at {:.2f} fps",
+        result.gain,
+        result.expected_gain,
+        result.residual,
+        result.fps,
     )
 
 
@@ -261,7 +324,7 @@ def blank_search_command(
     directory = run_dir("blank-search")
     with rig(host, device, exposure_ms, gamma) as setup:
         found, ratios = blank_search(setup, led_map, gpios, level)
-    write_json(directory / "result.json", {"found": found, "ratios": ratios})
+        write_json(directory / "result.json", {"found": found, "ratios": ratios})
     logger.info("BLANK lines found: {}", found or "none")
 
 

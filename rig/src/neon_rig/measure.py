@@ -17,6 +17,8 @@ def region_reducer(
     """A frame reducer giving each region's weighted linear luminance, minus
     the same weighted sum over the map's dark image (linear BGR)."""
     keys = keys if keys is not None else [region.key for region in led_map.present()]
+    if not keys:
+        raise ValueError("no regions to measure; the map found nothing lit")
     lut = linear_lut(gamma)
     indices = np.concatenate([led_map.masks[key][0] for key in keys])
     weights = np.concatenate([led_map.masks[key][1] for key in keys])
@@ -30,29 +32,22 @@ def region_reducer(
     return keys, reduce
 
 
-def mean_reducer(gamma: float) -> Callable[[np.ndarray], tuple[np.ndarray, np.ndarray]]:
-    """A frame reducer giving the linear BGR image and the raw frame, for
-    averaging and for spotting saturation."""
-    lut = linear_lut(gamma)
-    return lambda frame: (lut[frame], frame)
-
-
-def average(
-    results: list[tuple[np.ndarray, np.ndarray]],
-) -> tuple[np.ndarray, np.ndarray]:
-    """Mean linear image and per-pixel raw maximum of `mean_reducer` results."""
-    linear = np.mean([linear for linear, _ in results], axis=0)
-    raw_max = np.max([raw for _, raw in results], axis=0)
-    return linear, raw_max
+def frame_rate(times: np.ndarray) -> float:
+    """Frames per second from frame times, as the camera actually ran."""
+    return float(1 / np.median(np.diff(times)))
 
 
 def uniform(
     times: np.ndarray, values: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, int]:
     """Resample onto an even grid at the median frame interval. Returns the
-    grid, the values, and how many frames the camera dropped."""
+    grid, the values, and how many frames the camera dropped. A frame less
+    than half an interval after the one before is a duplicate and is left
+    out."""
     step = float(np.median(np.diff(times)))
-    dropped = int(np.sum(np.round(np.diff(times) / step) - 1))
+    keep = np.concatenate([[True], np.diff(times) >= step / 2])
+    times, values = times[keep], values[keep]
+    dropped = int(np.sum(np.maximum(np.round(np.diff(times) / step) - 1, 0)))
     grid = times[0] + step * np.arange(round((times[-1] - times[0]) / step) + 1)
     return grid, np.interp(grid, times, values), dropped
 
@@ -83,15 +78,23 @@ def flicker(times: np.ndarray, values: np.ndarray) -> Flicker:
     mean; `band_rms` and the peak are the part between 0.5 and 15 Hz."""
     grid, series, dropped = uniform(times, values)
     deviation = relative(grid, series)
-    step = grid[1] - grid[0]
-    window = np.hanning(len(deviation))
+    count, step = len(deviation), grid[1] - grid[0]
+    window = np.hanning(count)
     spectrum = np.fft.rfft(deviation * window)
-    freqs = np.fft.rfftfreq(len(deviation), step)
-    # Amplitude of a sinusoid at each frequency, and the RMS in the band.
+    freqs = np.fft.rfftfreq(count, step)
+    # The amplitude of a sinusoid at each frequency.
     amplitude = 2 * np.abs(spectrum) / window.sum()
-    band = (freqs >= BAND_HZ[0]) & (freqs <= BAND_HZ[1])
-    power = np.abs(np.fft.rfft(deviation)) ** 2 / len(deviation) ** 2
-    band_rms = float(np.sqrt(2 * power[band].sum()))
+    # At 30 fps the band's top, 15 Hz, is the last bin.
+    band = (freqs >= BAND_HZ[0]) & (freqs <= BAND_HZ[1] * (1 + 1e-9))
+    # Each bin's share of the variance. The window keeps slow drift from
+    # leaking into the band; one-sided bins count twice, apart from DC and,
+    # for an even count, the last.
+    doubled = np.full(len(freqs), 2.0)
+    doubled[0] = 1.0
+    if count % 2 == 0:
+        doubled[-1] = 1.0
+    variance = doubled * np.abs(spectrum) ** 2 / (count * (window**2).sum())
+    band_rms = float(np.sqrt(variance[band].sum()))
     peak = int(np.argmax(np.where(band, amplitude, 0.0)))
     return Flicker(
         mean=float(series.mean()),

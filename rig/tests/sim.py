@@ -50,6 +50,10 @@ class Installation:
     # Which GPIO each chain's BLANK line is wired to.
     blank_wiring: dict[str, str] = field(default_factory=dict)
     floating_blank: frozenset[str] = frozenset()
+    # LEDs lose up to this fraction of their light as they warm up, with this
+    # time constant, after their chain's frame changes.
+    droop: float = 0.0
+    droop_tau_s: float = 30.0
     seed: int = 1
     levels: dict[str, np.ndarray] = field(init=False)
     switches: dict[str, dict[str, Any]] = field(init=False)
@@ -58,6 +62,7 @@ class Installation:
     # Each tick's offset from its slot, in seconds.
     jitter: np.ndarray = field(default_factory=lambda: np.zeros(1))
     driven: dict[str, int] = field(default_factory=dict)
+    lit_at: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         rng = np.random.default_rng(self.seed)
@@ -79,10 +84,17 @@ class Installation:
             isinstance(condition, Wobble)
             and (condition.chain, condition.chip, condition.channel) == key
         ):
-            middle = (t0 + t1) / 2 - self.started_at
-            level *= 1 + condition.depth * math.sin(
-                2 * math.pi * condition.freq_hz * middle
-            )
+            # Like the Lab, the level steps at each tick, to the sinusoid's
+            # value at that tick.
+            ticks = [t for t, _ in self._shifts(chain, t0 - 1, (t0 + t1) / 2)]
+            if ticks:
+                seconds = ticks[-1] - self.started_at
+                level *= 1 + condition.depth * math.sin(
+                    2 * math.pi * condition.freq_hz * seconds
+                )
+        if self.droop:
+            warm = 1 - math.exp(-(t0 - self.lit_at.get(chain, t0)) / self.droop_tau_s)
+            level *= 1 - self.droop * warm
         d = min(level, GS_STEPS - 1) / GS_STEPS
         period, phase = self.period[(chain, chip)], self.phase[(chain, chip)]
 
@@ -163,17 +175,20 @@ class SimPi:
         site = self._call()
         for name in [chain] if chain else site.chips:
             site.levels[name][:] = level
+            site.lit_at[name] = self.clock.now()
 
     def light_one(self, chain: str, chip: int, channel: int, level: int) -> None:
         site = self._call()
-        for levels in site.levels.values():
+        for name, levels in site.levels.items():
             levels[:] = 0
+            site.lit_at[name] = self.clock.now()
         site.levels[chain][chip * CHANNELS + channel] = level
 
     def start(self, condition: Condition) -> None:
         site = self._call()
+        chains = getattr(condition, "chains", None) or site.chips
         if getattr(condition, "latch", "xlat") == "blank_pulse" and not all(
-            switches["blank_gpio"] for switches in site.switches.values()
+            site.switches[chain]["blank_gpio"] for chain in chains
         ):
             raise PiError("Lab returned an error: :no_blank_gpio")
         jitter_s = getattr(condition, "jitter_ms", 0.0) / 1000
@@ -216,9 +231,14 @@ class SimCamera:
         exposure_s: float = 0.02,
         shape: tuple[int, int] = (120, 160),
         dark: float = 0.004,
-        noise: float = 0.002,
+        noise: float = 0.0005,
+        code_noise: float = 0.8,
+        glow: tuple[int, int, int, float] | None = None,
         seed: int = 2,
     ) -> None:
+        """`noise` is in linear light and `code_noise` in 8-bit codes, where a
+        real camera's mostly is. `glow` is a steady bright square, such as a
+        status LED or a screen: (x, y, size, linear level)."""
         self.installation = installation
         self.clock = clock
         self.fps = fps
@@ -226,6 +246,8 @@ class SimCamera:
         self.shape = shape
         self.dark = dark
         self.noise = noise
+        self.code_noise = code_noise
+        self.glow = glow
         self.rng = np.random.default_rng(seed)
         self.offset = 0.0123
 
@@ -243,12 +265,17 @@ class SimCamera:
 
     def render(self, t: float) -> np.ndarray:
         linear = np.full((*self.shape, 3), self.dark)
+        if self.glow:
+            x, y, size, level = self.glow
+            linear[y : y + size, x : x + size] = level
         for led in self.installation.leds:
             duty = self.installation.duty(led.key, t, t + self.exposure_s)
             if duty > 0:
                 linear += duty * led.image
         linear += self.rng.normal(0, self.noise, linear.shape)
-        return (np.clip(linear, 0, 1) ** (1 / 2.2) * 255).round().astype(np.uint8)
+        codes = np.clip(linear, 0, 1) ** (1 / 2.2) * 255
+        codes += self.rng.normal(0, self.code_noise, codes.shape)
+        return np.clip(codes.round(), 0, 255).astype(np.uint8)
 
 
 BLUE = (0.5, 0.08, 0.02)

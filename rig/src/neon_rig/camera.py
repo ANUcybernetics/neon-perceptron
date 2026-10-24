@@ -53,6 +53,7 @@ class Control:
     value: int
     minimum: int | None = None
     maximum: int | None = None
+    step: int | None = None
 
 
 _CONTROL_LINE = re.compile(r"^\s*(\w+)\s+0x[0-9a-f]+\s+\((\w+)\)\s*:\s*(.*)$")
@@ -68,7 +69,12 @@ def parse_controls(listing: str) -> dict[str, Control]:
             fields = {key: int(value) for key, value in _FIELD.findall(rest)}
             if "value" in fields:
                 controls[name] = Control(
-                    name, kind, fields["value"], fields.get("min"), fields.get("max")
+                    name,
+                    kind,
+                    fields["value"],
+                    fields.get("min"),
+                    fields.get("max"),
+                    fields.get("step"),
                 )
     return controls
 
@@ -91,10 +97,18 @@ def lock_plan(
     def first(*names: str) -> Control | None:
         return next((controls[name] for name in names if name in controls), None)
 
+    # Values the camera accepts as they are: within range and on a step, so
+    # reading them back gives the same number.
     def clamp(control: Control, value: int) -> int:
         low = control.minimum if control.minimum is not None else value
         high = control.maximum if control.maximum is not None else value
-        return max(low, min(high, value))
+        clamped = max(low, min(high, value))
+        if control.step and control.step > 1:
+            clamped = low + round((clamped - low) / control.step) * control.step
+            clamped = min(clamped, high)
+        if clamped != value:
+            logger.warning("{} set to {} rather than {}", control.name, clamped, value)
+        return clamped
 
     plan: list[tuple[str, int]] = []
 
@@ -176,8 +190,14 @@ class V4l2Camera:
         # Streaming has to start before some UVC cameras accept controls.
         self._read()
         self.controls = lock_controls(device, settings)
-        self.fps = self.capture.get(cv2.CAP_PROP_FPS) or fps
-        self.exposure_s = settings.exposure_ms / 1000
+        reported = self.capture.get(cv2.CAP_PROP_FPS)
+        self.fps = reported if reported > 0 else fps
+        # The exposure as set, in UVC's units of 100 us, which can differ
+        # from the one asked for when the camera's range or step forces it.
+        exposure = self.controls.get(
+            "exposure_time_absolute", self.controls.get("exposure_absolute")
+        )
+        self.exposure_s = exposure / 10_000 if exposure else settings.exposure_ms / 1000
         shape = (
             self.capture.get(cv2.CAP_PROP_FRAME_WIDTH),
             self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT),

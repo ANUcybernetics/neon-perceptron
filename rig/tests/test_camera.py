@@ -54,3 +54,15 @@ def test_older_control_names_and_focus() -> None:
         ("focus_auto", 0),
         ("focus_absolute", 40),
     ]
+
+
+STEPPED = """
+                  auto_exposure 0x009a0901 (menu)   : min=0 max=3 default=3 value=3
+         exposure_time_absolute 0x009a0902 (int)    : min=50 max=10000 step=50 default=150 value=150
+"""
+
+
+def test_values_land_on_the_cameras_steps() -> None:
+    plan = dict(lock_plan(parse_controls(STEPPED), Settings(exposure_ms=23)))
+
+    assert plan["exposure_time_absolute"] == 250

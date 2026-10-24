@@ -1,9 +1,10 @@
 from pathlib import Path
 
 import numpy as np
-from conftest import CHIPS
+from conftest import CHIPS, MakeRig
 from sim import layout
 
+from neon_rig.experiments import crowded, map_leds
 from neon_rig.leds import LedMap
 
 
@@ -32,3 +33,15 @@ def test_a_map_survives_saving_and_loading(led_map: LedMap, tmp_path: Path) -> N
         np.testing.assert_array_equal(loaded.masks[key][0], indices)
         np.testing.assert_array_equal(loaded.masks[key][1], weights)
     np.testing.assert_array_equal(loaded.dark, led_map.dark)
+
+
+def test_a_bright_steady_patch_isnt_taken_for_an_led(make_rig: MakeRig) -> None:
+    # A status LED or a screen, away from the installation's LEDs and brighter
+    # than the dark frame around it.
+    rig, _ = make_rig(camera={"glow": (130, 60, 6, 0.08)})
+    leds, _ = layout(CHIPS)
+
+    led_map, _ = map_leds(rig)
+
+    assert {region.key for region in led_map.present()} == {led.key for led in leds}
+    assert crowded(led_map) == []

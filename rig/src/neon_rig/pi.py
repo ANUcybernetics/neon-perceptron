@@ -8,8 +8,10 @@ between calls.
 """
 
 import json
+import math
 import re
 import subprocess
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -70,7 +72,9 @@ class Reshift:
 
 @dataclass(frozen=True)
 class Wobble:
-    """Vary one channel's level by a fraction `±depth` at `freq_hz`."""
+    """Vary one channel's level by a fraction `±depth` at `freq_hz`, updated
+    `rate_hz` times a second, each tick up to `jitter_ms` either side of its
+    slot."""
 
     chain: str
     chip: int
@@ -79,6 +83,7 @@ class Wobble:
     freq_hz: float = 5.0
     rate_hz: float = 30.0
     latch: Latch = "xlat"
+    jitter_ms: float = 0.0
 
 
 type Condition = Relatch | Reshift | Wobble
@@ -119,9 +124,12 @@ def elixir(value: Any) -> str:
             return f":{name}"
         case int():
             return str(value)
-        case float():
-            text = f"{value:.9f}".rstrip("0")
-            return text + "0" if text.endswith(".") else text
+        case float() if math.isfinite(value):
+            # Elixir wants digits on both sides of the point, even before an
+            # exponent: 1.0e-5, not 1e-05.
+            mantissa, _, exponent = repr(value).partition("e")
+            mantissa += "" if "." in mantissa else ".0"
+            return mantissa + (f"e{int(exponent)}" if exponent else "")
         case str() if re.fullmatch(r"[A-Za-z0-9_.:-]*", value):
             return f'"{value}"'
         case list() | tuple():
@@ -145,6 +153,7 @@ def condition_term(condition: Condition) -> dict[str, Any]:
             "freq_hz": float(condition.freq_hz),
             "rate_hz": float(condition.rate_hz),
             "latch": Atom(condition.latch),
+            "jitter_ms": float(condition.jitter_ms),
         }
     term: dict[str, Any] = {"rate_hz": float(condition.rate_hz)}
     if isinstance(condition, Relatch):
@@ -158,15 +167,15 @@ def condition_term(condition: Condition) -> dict[str, Any]:
     return term
 
 
-_REPLY = re.compile(r"LAB (\{.*\})")
-
-
 def reply_envelope(stdout: str) -> dict[str, Any] | None:
     """The envelope from the `LAB` line of a `Lab.reply/1` call, if any. The
     line can come after an IEx prompt or other output, so it's found
-    anywhere."""
-    match = _REPLY.search(stdout)
-    return json.loads(match.group(1)) if match else None
+    anywhere, and anything after the JSON is ignored."""
+    start = stdout.find("LAB {")
+    if start < 0:
+        return None
+    envelope, _end = json.JSONDecoder().raw_decode(stdout, start + len("LAB "))
+    return envelope
 
 
 type Runner = Callable[..., subprocess.CompletedProcess[str]]
@@ -194,6 +203,14 @@ class SshPi:
             argv, capture_output=True, text=True, timeout=self.timeout_s
         )
         envelope = reply_envelope(result.stdout)
+        # ssh exits 255 when the connection itself fails. Without a reply the
+        # call may never have reached the Pi, so try once more.
+        if envelope is None and result.returncode == 255:
+            time.sleep(1.0)
+            result = self.runner(
+                argv, capture_output=True, text=True, timeout=self.timeout_s
+            )
+            envelope = reply_envelope(result.stdout)
         # A multiplexed session now and then ends without passing on the exit
         # status, so ssh exits 255 after a complete reply. The LAB line only
         # exists once the call has run, so it outranks the exit code.

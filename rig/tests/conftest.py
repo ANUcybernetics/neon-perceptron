@@ -2,7 +2,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from sim import Installation, SimCamera, SimClock, SimPi, layout
+from sim import Installation, SimCamera, SimClock, SimLed, SimPi, layout
 
 from neon_rig.experiments import Rig, map_leds
 from neon_rig.leds import LedMap
@@ -16,11 +16,15 @@ type MakeRig = Callable[..., tuple[Rig, Installation]]
 def make_rig() -> MakeRig:
     """A rig on a simulated installation; keyword arguments go to it."""
 
-    def make(**options: Any) -> tuple[Rig, Installation]:
+    def make(
+        camera: dict[str, Any] | None = None, brightness: float = 1.0, **options: Any
+    ) -> tuple[Rig, Installation]:
         clock = SimClock()
         leds, _ = layout(CHIPS)
+        leds = [SimLed(led.key, led.position, led.image * brightness) for led in leds]
         site = Installation(chips=CHIPS, leds=leds, **options)
-        return Rig(SimPi(site, clock), SimCamera(site, clock), clock), site
+        sim_camera = SimCamera(site, clock, **(camera or {}))
+        return Rig(SimPi(site, clock), sim_camera, clock), site
 
     return make
 
