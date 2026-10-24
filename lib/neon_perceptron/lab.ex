@@ -32,8 +32,8 @@ defmodule NeonPerceptron.Lab do
     camera can see.
 
   `:chains` limits `:relatch` and `:reshift` to a list of chains, and
-  `:jitter_ms` moves each of their ticks by a random amount up to that
-  far either side of its slot (less than half a period). A camera running
+  `:jitter_ms` moves each tick of any condition by a random amount up to
+  that far either side of its slot (less than half a period). A camera running
   near a multiple of the tick rate sees a regular disturbance at the same
   point of every frame, where it can't tell it from a steady one; jitter
   spreads the disturbances across the frame.
@@ -403,6 +403,7 @@ defmodule NeonPerceptron.Lab do
     freq = Map.get(spec, :freq_hz, 5.0)
     rate = Map.get(spec, :rate_hz, 30.0)
     latch = Map.get(spec, :latch, :xlat)
+    jitter = Map.get(spec, :jitter_ms, 0)
 
     with {:ok, levels} <- Map.fetch(state.frames, chain) |> or_error(:no_frame_for_chain),
          :ok <- check_position(chain, chip, channel),
@@ -411,7 +412,8 @@ defmodule NeonPerceptron.Lab do
          true <- base * (1 + depth) <= Board.gs_max() || {:error, :wobble_clips},
          true <- valid_wobble_rates?(freq, rate) || {:error, :bad_rate},
          true <- latch in [:xlat, :blank_pulse] || {:error, {:bad_latch, latch}},
-         true <- latch == :xlat || blank_gpio?(chain) || {:error, :no_blank_gpio} do
+         true <- latch == :xlat || blank_gpio?(chain) || {:error, :no_blank_gpio},
+         true <- valid_jitter?(jitter, rate) || {:error, {:bad_jitter, jitter}} do
       {:ok,
        %{
          kind: :wobble,
@@ -422,7 +424,7 @@ defmodule NeonPerceptron.Lab do
          freq_hz: freq,
          rate_hz: rate,
          latch: latch,
-         jitter_ms: 0
+         jitter_ms: jitter
        }}
     end
   end

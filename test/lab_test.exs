@@ -190,7 +190,10 @@ defmodule NeonPerceptron.LabTest do
     assert {:error, :bad_rate} =
              Lab.start(%{wobble | depth: 0.01} |> Map.merge(%{freq_hz: 20, rate_hz: 30}))
 
-    assert :ok = Lab.start(%{wobble | depth: 0.01})
+    assert {:error, {:bad_jitter, 20}} =
+             Lab.start(Map.merge(wobble, %{depth: 0.01, jitter_ms: 20}))
+
+    assert :ok = Lab.start(Map.merge(wobble, %{depth: 0.01, jitter_ms: 10}))
     assert %{kind: :wobble} = Lab.stop()
   end
 
