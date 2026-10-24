@@ -1,9 +1,10 @@
 ---
 id: TASK-24
 title: Build a closed-loop webcam rig for unattended LED experiments
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-10-24T00:59:00Z'
+updated_date: '2026-10-24T04:13:00Z'
 due_date: '2026-10-26'
 labels:
   - hardware
@@ -59,3 +60,54 @@ Related: TASK-17 (flicker), TASK-21 (channel map, which the rig can produce auto
 - [ ] #6 Flicker metrics are recorded for both chains for a static frame, the same frame re-latched at 30 Hz and at 10 Hz, the same frame re-shifted at 30 Hz without latching, and (if BLANK is found) re-latched with BLANK pulsed around XLAT
 - [ ] #7 Ben's judgement of visible flicker is compared once against the camera metric and the threshold is recorded in the task notes
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. On weddle: `sudo apt install v4l-utils`; `sudo usermod -aG video ben`, then a fresh login.
+2. Upload the current firmware (`mise run upload:leds-bench HOST=nerves.local`). If weddle's SSH key isn't on the Pi's firmware, burn the SD card on weddle instead (`DEVICE=/dev/sdX mise run burn:leds-bench`).
+3. `mise run rig -- check`: the Pi answers, both chains are listed, and the camera lock plan looks sane (AC #1).
+4. `mise run rig -- camera`: check framing, focus and saturation in `still.png` (AC #2).
+5. `mise run rig -- map`, then check `annotated.png` against the installation (AC #3).
+6. `mise run rig -- calibrate` (AC #4).
+7. `mise run rig -- blank-search` (AC #5). If it finds the lines, `mise run rig -- configure <chain> --blank-gpio <GPIO> --blank-pulse`.
+8. `mise run rig -- suite` on both chains, rerun with BLANK configured if found (AC #6).
+9. With Ben watching, run a few conditions and record his calls against the suite's numbers (AC #7).
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+## Built for the rig (2026-10-24)
+
+- `NeonPerceptron.Chain` switches, set in the chain config or at runtime with `Chain.configure/2`: `:send_on_change`, `:max_rate_hz`, `:refresh_ms`, `:blank_gpio` (BLANK held high until the first latch) and `:blank_pulse` (BLANK raised around each XLAT). The defaults keep the April behaviour, so the first measurements are a baseline.
+- PubSub now starts before the chains, so V2's chains get the trainer's broadcasts. They didn't before.
+- `NeonPerceptron.Lab` (Pi side) holds the chains and runs raw-grayscale fills, timed conditions (re-latch, re-shift, wobble, optional tick jitter), GPIO probes and MISO readback.
+- `rig/` (weddle side, Python) has `neon-rig check`, `camera`, `map`, `calibrate`, `blank-search`, `suite`, `configure` and `release`. `rig/README.md` explains the metrics.
+- `mise run firmware:leds-bench` builds on weddle with all of this.
+
+## Measurement decisions, and why
+
+- **Suite level 4095, calibration level 4000:** near full duty the PWM period can't beat against the 20 ms exposure. At mid levels that beat adds frame-to-frame noise the eye doesn't see.
+- **10 ms tick jitter in the suite's timed conditions:** a 30 Hz disturbance seen at 30 fps lands at the same point of every frame, so it reads as steady. Jitter spreads it across the exposure.
+- **Calibration wobbles one channel with nothing else lit:** the camera can't separate an RGB LED's dies. With everything lit, a wobble on one die showed at a third of its size in simulation.
+- **`mean_vs_static` alongside RMS flicker:** each latch costs light, so latching three times as often costs more light even when the RMS looks similar.
+
+## Checks done without hardware
+
+- The weddle side ran against a simulated installation (PWM on-time over the exposure, XLAT blanking, BLANK lines, a floating BLANK):
+  - mapping found every populated channel within a pixel;
+  - re-latching flickered 15--20 times the static floor;
+  - re-shifting matched static unless BLANK floated;
+  - pulsing BLANK removed the latch flicker;
+  - a 1% wobble at 5 Hz measured 0.99% (SNR about 8).
+- The SSH path ran end to end against an Erlang SSH daemon with NervesSSH's exec handling, over the host app with the real `Lab`. With the control master, each call takes about 5 ms after the first.
+  - A command's printed output could arrive after its result. Now `Lab.reply/1` returns its line rather than printing it.
+  - Multiplexed ssh occasionally exits 255 after a complete reply (1 call in 400). `SshPi` trusts the reply.
+
+## Unknown until Monday
+
+- Whether the camera holds 30 fps with a 20 ms exposure.
+- Whether full-duty LEDs saturate it; if so, use an ND gel, defocus, or `--level`.
+- Whether weddle's SSH key is on the Pi's current firmware.
+<!-- SECTION:NOTES:END -->
