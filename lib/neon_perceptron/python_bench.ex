@@ -130,7 +130,7 @@ defmodule NeonPerceptron.PythonBench do
       #   b0 = val1 & 0xFF        (lower 8 bits of val1)
       [
         val2 >>> 4 &&& 0xFF,
-        val1 >>> 8 &&& 0x0F ||| val2 <<< 4 &&& 0xF0,
+        (val1 >>> 8 &&& 0x0F) ||| (val2 <<< 4 &&& 0xF0),
         val1 &&& 0xFF
       ]
     end)
