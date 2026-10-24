@@ -1,7 +1,7 @@
 ---
 id: TASK-23
 title: Port Brendan's Python bench_test to Elixir for flicker debugging
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-04-17 10:00'
 labels:
@@ -125,9 +125,87 @@ iex> NeonPerceptron.PythonBench.stop()
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 `NeonPerceptron.PythonBench.start_link/0` blinks chip 0 of `:main` with RGB sweep
-- [ ] #2 Byte packing verified identical to `brendan-spi-test.py` (compare hex dump of first buffer)
-- [ ] #3 Runs side-by-side with `Chain.ex` on same Pi without conflicting (only one active at a time)
-- [ ] #4 Bench test executed on Pi 4B and result (flicker present / absent) documented in this task's notes
-- [ ] #5 Conclusion recorded: flicker is chain-level or Elixir-level
+- [x] #1 `NeonPerceptron.PythonBench.run/0` (spawned in background) blinks chip 0 of `:main` with RGB sweep
+- [x] #2 Byte packing verified identical to `brendan-spi-test.py` (4 host-side equivalence tests in `test/python_bench_test.exs`)
+- [x] #3 Runs side-by-side with `Chain.ex` on same Pi without conflicting --- driver requires `Supervisor.terminate_child(NeonPerceptron.Supervisor, {NeonPerceptron.Chain, :main})` first to free SPI1 + GPIO 18, then `restart_child` to bring `Chain` back
+- [x] #4 Bench test executed on Pi 5 (not Pi 4B as originally written --- the bench currently has Pi 5; Pi 4B retired post-TASK-22) and results documented below
+- [ ] #5 Conclusion recorded: flicker is chain-level or Elixir-level (BLOCKED on stock-Pi script comparison --- a Python script on stock Raspbian reportedly drives this same hardware cleanly, undermining the SI-ceiling hypothesis below; need to find the script and compare)
 <!-- AC:END -->
+
+## Implementation Notes
+
+### 2026-04-28 bench session (Pi 5, `nerves.local`)
+
+#### Deviations from the original spec
+
+Three intentional deviations from the literal "byte-for-byte port" once
+the implementation met the bench:
+
+1. **SPI speed: 1 MHz, not Brendan's 10 MHz.** Match `Chain.ex`'s
+   `:main` envelope so PythonBench differs from `Chain.ex` only in
+   Elixir-side abstractions (gamma, `Enum.reverse`, chain rendering).
+   Diagnostic apples-to-apples.
+2. **100 µs busy-wait between `Circuits.SPI.transfer!` and the XLAT
+   pulse.** Pi 5's aux SPI (which `:main`/`spidev1.0` uses) returns
+   from the kernel ioctl before the TX FIFO has fully drained ---
+   without the wait, XLAT fires while bytes are still in flight and
+   the chip latches a 36-bit-shifted snapshot. Same fix
+   `Chain.ex` adopted in commit 0859213.
+3. **Chain padding: 8 chips' worth of zeros prepended.** `:main` is
+   a 9-chip chain. Sending only 36 bytes (one chip's worth) puts
+   correct data in chip 0 but leaves chips 1--8 each latching a
+   shifted snapshot of their upstream neighbour's previous GS
+   register --- they strobe random data and visually drown out
+   chip 0. Prepending 8 × 36 zero bytes keeps chips 1--8 dark so we
+   can observe chip 0 in isolation.
+
+#### Observations
+
+| Configuration | Chip 0 of `:main` |
+|---|---|
+| 10 MHz, no FIFO drain wait, 36-byte transfer | not actually run --- earlier "0.5 Hz blinking" report was Chain.ex+TestPattern, not PythonBench (misattribution) |
+| 1 MHz + 100 µs drain, 36 bytes | chip 0 garbage flickers; chips 1--8 strobe random shifts and dominate visually |
+| 1 MHz + 100 µs drain + 8-chip blank padding | chips 1--8 dark; chip 0 RGB pulses smoothly-ish but with residual flicker, more than expected |
+| Same as above, with `:input_left` Chain also terminated | residual flicker on chip 0 not noticeably reduced |
+| (After power cycle, Chain.ex driving both chains) | chip 0 of `:main` "steadier than all the subsequent ones" |
+
+#### Working hypothesis (not concluded)
+
+A first-pass reading of the data above suggested chain-level signal
+integrity (chip 0 steadier than chips 1--8 looks like SI degrading
+along the ribbon). But this hypothesis is **not yet supported** ---
+Ben recalls that a Python script on the stock Raspbian image drives
+this same hardware *without* the residual flicker we see, which
+implies the hardware path is capable of clean operation and
+something software-side differs.
+
+Candidate software-side differences worth checking before settling
+on any conclusion:
+
+- Kernel SPI driver version (Buildroot Nerves vs stock Raspbian)
+  and aux-SPI FIFO/DMA handling
+- `Circuits.SPI` ioctl flags / completion semantics vs Python
+  `spidev`'s `SPI_IOC_MESSAGE`
+- `Circuits.GPIO.write` latency and any in-flight scheduler
+  preemption between the two XLAT writes vs Python `RPi.GPIO`
+- BEAM scheduler activity during the 100 µs busy-wait or between
+  frames (other Chains, Phoenix, etc., even with `:input_left`
+  Chain terminated)
+- CPU governor / clock scaling differences
+- 100 µs FIFO drain may be insufficient on Pi 5 aux SPI ---
+  worth retrying with 1 ms
+
+#### Next step
+
+Find the stock-Pi Python script that drives `:main` cleanly and
+compare line-by-line against `python_bench.ex`. Memory points at
+`btraw@raspberrypi.local:/home/btraw/tlc5947_test/bench_test.py` as
+a known-good but Ben has indicated there's a separate script worth
+tracking down too.
+
+Once the working Python is in hand:
+
+1. Diff its SPI/XLAT/timing setup against PythonBench
+2. Apply each difference one-at-a-time to PythonBench until the
+   flicker disappears
+3. THEN draw the conclusion for AC #5
