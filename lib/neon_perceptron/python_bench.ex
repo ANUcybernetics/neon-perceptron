@@ -32,8 +32,8 @@ defmodule NeonPerceptron.PythonBench do
   If this port flickers identically to `Chain.ex`: the flicker is
   chain-level (ribbon SI / power) and not an Elixir bug. If this is
   clean but `Chain.ex` flickers, the bug is in our abstraction ---
-  audit `Board.encode/1` packing, the `Enum.reverse` in
-  `Chain.render_and_send/2`, or gamma correction.
+  audit `Board.encode/1` packing, the `Enum.reverse` in `Chain`'s
+  update path, or gamma correction.
 
   See `backlog/tasks/task-23 - Port-Brendans-Python-bench-test-to-Elixir-for-debugging.md`.
   """
@@ -49,18 +49,15 @@ defmodule NeonPerceptron.PythonBench do
   #
   # 1. `@spi_speed_hz` is 1 MHz, not Brendan's 10 MHz. Brendan tests
   #    on a single chip; we drive a 9-chip ribbon-linked chain off
-  #    the Pi 5 aux SPI. Chain.ex bench-tested 25 MHz failing past
-  #    chip 3 on this chain (commit 6993b9f's predecessor) and
-  #    settled on 1 MHz.
+  #    SPI1. Chain.ex bench-tested 25 MHz failing past chip 3 on this
+  #    chain (commit 6993b9f's predecessor) and settled on 1 MHz.
   # 2. We busy-wait 100 µs between `Circuits.SPI.transfer!` and the
-  #    XLAT pulse to let the BCM aux-SPI TX FIFO drain (see
-  #    `Chain.spi_transfer/4` and commit 0859213). Without this, XLAT
-  #    fires while bytes are still in flight and the chip latches a
-  #    36-bit-shifted snapshot.
+  #    XLAT pulse, as `Chain` does. See `@xlat_delay_us` there for why
+  #    that wait is a precaution rather than a fix.
   @spi_device "spidev1.0"
   @spi_speed_hz 1_000_000
   @xlat_gpio "GPIO18"
-  @fifo_drain_us 100
+  @xlat_delay_us 100
   @pwm_max 4095
   @num_channels 24
 
@@ -113,7 +110,7 @@ defmodule NeonPerceptron.PythonBench do
     blanks = :binary.copy(<<0>>, (@chain_chips - 1) * 36)
     buffer = blanks <> pack(led_array)
     Circuits.SPI.transfer!(spi, buffer)
-    busy_wait_us(@fifo_drain_us)
+    busy_wait_us(@xlat_delay_us)
     Circuits.GPIO.write(xlat, 1)
     Circuits.GPIO.write(xlat, 0)
     :ok
