@@ -13,11 +13,13 @@ defmodule NeonPerceptron.Application do
     build = Application.get_env(:neon_perceptron, :build)
     role = Application.get_env(:neon_perceptron, :role, :trainer)
 
+    # Lab goes last so that its crashing restarts nothing else.
     children =
       common_children() ++
         build_children(build, role) ++
         phoenix_children() ++
-        platform_children()
+        platform_children() ++
+        [NeonPerceptron.Lab]
 
     opts = [strategy: :rest_for_one, name: NeonPerceptron.Supervisor]
     Supervisor.start_link(children, opts)
