@@ -1,5 +1,5 @@
 ---
-id: task-10
+id: TASK-26
 title: Add graceful hardware degradation to Display module
 status: To Do
 assignee: []

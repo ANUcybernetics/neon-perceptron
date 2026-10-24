@@ -1,5 +1,5 @@
 ---
-id: task-11
+id: TASK-27
 title: Add GPIO guard clauses to Knob module
 status: To Do
 assignee: []

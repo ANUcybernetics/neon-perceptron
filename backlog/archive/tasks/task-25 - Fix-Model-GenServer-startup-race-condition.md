@@ -1,5 +1,5 @@
 ---
-id: task-9
+id: TASK-25
 title: Fix Model GenServer startup race condition
 status: To Do
 assignee: []
