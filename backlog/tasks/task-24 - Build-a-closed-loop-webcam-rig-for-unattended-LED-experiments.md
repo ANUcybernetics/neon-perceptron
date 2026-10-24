@@ -4,7 +4,7 @@ title: Build a closed-loop webcam rig for unattended LED experiments
 status: In Progress
 assignee: []
 created_date: '2026-10-24T00:59:00Z'
-updated_date: '2026-10-24T04:13:00Z'
+updated_date: '2026-10-24T04:57:00Z'
 due_date: '2026-10-26'
 labels:
   - hardware
@@ -78,36 +78,52 @@ Related: TASK-17 (flicker), TASK-21 (channel map, which the rig can produce auto
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-## Built for the rig (2026-10-24)
+## Built for the rig
 
-- `NeonPerceptron.Chain` switches, set in the chain config or at runtime with `Chain.configure/2`: `:send_on_change`, `:max_rate_hz`, `:refresh_ms`, `:blank_gpio` (BLANK held high until the first latch) and `:blank_pulse` (BLANK raised around each XLAT). The defaults keep the April behaviour, so the first measurements are a baseline.
+- `NeonPerceptron.Chain` switches, set in the chain config or at runtime with `Chain.configure/2`: `:send_on_change`, `:max_rate_hz`, `:refresh_ms`, `:blank_gpio` (BLANK held high until the first latch) and `:blank_pulse` (BLANK raised around each XLAT).
+  - The defaults keep the April behaviour, so the first measurements are a baseline.
+  - A BLANK GPIO that won't open is refused, not silently ignored.
 - PubSub now starts before the chains, so V2's chains get the trainer's broadcasts. They didn't before.
-- `NeonPerceptron.Lab` (Pi side) holds the chains and runs raw-grayscale fills, timed conditions (re-latch, re-shift, wobble, optional tick jitter), GPIO probes and MISO readback.
-- `rig/` (weddle side, Python) has `neon-rig check`, `camera`, `map`, `calibrate`, `blank-search`, `suite`, `configure` and `release`. `rig/README.md` explains the metrics.
+- `NeonPerceptron.Lab` (Pi side) holds the chains and runs raw-grayscale fills, timed conditions (re-latch, re-shift, wobble, all with optional tick jitter), GPIO probes and MISO readback.
+  - A condition whose shifts fail stops itself, and `stop/0` says why.
+  - Input it can't run as asked is refused rather than crashing it.
+- `rig/` (weddle side, Python) has `neon-rig check`, `camera`, `map`, `calibrate`, `blank-search`, `suite`, `configure` and `release`.
+  - Results and raw series go to `rig/runs/`.
+  - `rig/README.md` explains the metrics.
 - `mise run firmware:leds-bench` builds on weddle with all of this.
 
 ## Measurement decisions, and why
 
-- **Suite level 4095, calibration level 4000:** near full duty the PWM period can't beat against the 20 ms exposure. At mid levels that beat adds frame-to-frame noise the eye doesn't see.
-- **10 ms tick jitter in the suite's timed conditions:** a 30 Hz disturbance seen at 30 fps lands at the same point of every frame, so it reads as steady. Jitter spreads it across the exposure.
-- **Calibration wobbles one channel with nothing else lit:** the camera can't separate an RGB LED's dies. With everything lit, a wobble on one die showed at a third of its size in simulation.
-- **`mean_vs_static` alongside RMS flicker:** each latch costs light, so latching three times as often costs more light even when the RMS looks similar.
+- **Per-pixel mapping noise:** camera noise is roughly constant in 8-bit codes, so in linear light bright patches are far noisier. With one noise figure for the frame, a status LED or a screen glow becomes a fake channel. Mapping also flags regions shared across chips.
+- **Suite level 4095, calibration level 4000:** near full duty the PWM period can't beat against the 20 ms exposure. Both refuse a scene that saturates everywhere.
+- **20 s warm-up, then a static capture before and after every condition:** the ratios to static use the captures either side, so LED warm-up drift cancels.
+- **Tick jitter of just under half a period:** without it, a disturbance repeating near the frame rate sits at the same point of every frame and looks steady. Partial jitter (10 ms at 30 Hz) only halves the periodicity, so at 25 fps re-latching at 30 Hz still aliased onto 5 Hz.
+- **Calibration:**
+  - It wobbles one channel with nothing else lit, because the camera can't separate an RGB LED's dies.
+  - Its null run latches the same way as the wobble, so an alias would show in both.
+  - It reports the measured gain, the expected gain (about 0.93: the level steps at 30 Hz and the exposure averages) and their ratio, the residual. A residual far from 1 means the camera's response differs from the assumed gamma, so absolute flicker figures are off by that factor.
+- **`mean_vs_static` alongside RMS flicker:** each latch costs light, so latching more often costs more light even when the RMS looks similar.
 
 ## Checks done without hardware
 
-- The weddle side ran against a simulated installation (PWM on-time over the exposure, XLAT blanking, BLANK lines, a floating BLANK):
-  - mapping found every populated channel within a pixel;
-  - re-latching flickered 15--20 times the static floor;
-  - re-shifting matched static unless BLANK floated;
-  - pulsing BLANK removed the latch flicker;
-  - a 1% wobble at 5 Hz measured 0.99% (SNR about 8).
-- The SSH path ran end to end against an Erlang SSH daemon with NervesSSH's exec handling, over the host app with the real `Lab`. With the control master, each call takes about 5 ms after the first.
-  - A command's printed output could arrive after its result. Now `Lab.reply/1` returns its line rather than printing it.
-  - Multiplexed ssh occasionally exits 255 after a complete reply (1 call in 400). `SshPi` trusts the reply.
+- Two independent reviews (Chain/Lab and the rig) found 17 problems, all fixed with tests. The worst two would have recorded wrong results silently:
+  - a BLANK line that failed to open made the BLANK-pulsed condition shift nothing;
+  - mapping noise made the suite report re-latching as reducing flicker.
+- The simulated installation now models camera noise in 8-bit codes, a glowing patch, LED warm-up droop and the Pi's stepped wobble. Across four seeds:
+  - the map had no false or missed channels;
+  - re-latching flickered 9--11 times static and re-shifting matched static, while a floating BLANK showed 17 times;
+  - warm-up drift was cancelled to 0.03%;
+  - a 1% wobble at 5 Hz was detected at 30 and 25 fps (SNR 9--12, null below 3);
+  - BLANK lines were found.
+- The SSH path ran end to end against an Erlang SSH daemon with NervesSSH's exec handling, over the host app with the real `Lab`:
+  - after the first call, each takes about 5 ms through the control master;
+  - jittered conditions held 30 ticks a second;
+  - refusals came back as errors.
 
 ## Unknown until Monday
 
-- Whether the camera holds 30 fps with a 20 ms exposure.
+- Whether the camera holds 30 fps with a 20 ms exposure (`calibrate` reports the real rate).
 - Whether full-duty LEDs saturate it; if so, use an ND gel, defocus, or `--level`.
+- The camera's real response (`calibrate`'s residual).
 - Whether weddle's SSH key is on the Pi's current firmware.
 <!-- SECTION:NOTES:END -->
