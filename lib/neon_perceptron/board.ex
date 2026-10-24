@@ -41,6 +41,7 @@ defmodule NeonPerceptron.Board do
   @rear_red 23
 
   @gamma 2.8
+  @gs_max 4095
 
   def channels_per_board, do: @channels_per_board
 
@@ -69,9 +70,30 @@ defmodule NeonPerceptron.Board do
     |> Enum.map(&clamp/1)
     |> Enum.map(&gamma_correction/1)
     |> Enum.map(&((&1 * 4095.9999999999) |> trunc()))
-    |> Enum.map(&<<&1::unsigned-integer-size(12)>>)
-    |> Enum.reduce(<<>>, fn x, acc -> <<acc::bitstring, x::bitstring>> end)
+    |> pack()
   end
+
+  @doc """
+  Pack raw 12-bit grayscale values (0--#{@gs_max}) MSB-first into TLC5947 SPI
+  binary, with no gamma correction. PWM duty, and so light output, is linear
+  in these values.
+  """
+  @spec pack([non_neg_integer()]) :: binary()
+  def pack(gs_values) when is_list(gs_values) do
+    for gs <- gs_values, into: <<>> do
+      if not (is_integer(gs) and gs >= 0 and gs <= @gs_max) do
+        raise ArgumentError,
+              "grayscale values must be integers in 0..#{@gs_max}, got #{inspect(gs)}"
+      end
+
+      <<gs::unsigned-integer-size(12)>>
+    end
+  end
+
+  @doc """
+  Largest 12-bit grayscale value (full brightness).
+  """
+  def gs_max, do: @gs_max
 
   defp gamma_correction(value) do
     :math.pow(value, @gamma)

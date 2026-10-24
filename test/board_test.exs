@@ -51,4 +51,21 @@ defmodule NeonPerceptron.BoardTest do
       assert raw > 400
     end
   end
+
+  describe "pack/1" do
+    test "packs 12-bit values MSB-first" do
+      assert Board.pack([0xABC, 0x123]) == <<0xAB, 0xC1, 0x23>>
+    end
+
+    test "matches Brendan's Python packing for one chip sent in wire order" do
+      leds = for i <- 0..23, do: rem(i * 173 + 41, 4096)
+      assert Board.pack(Enum.reverse(leds)) == NeonPerceptron.PythonBench.pack(leds)
+    end
+
+    test "rejects values that don't fit in 12 bits" do
+      for bad <- [4096, -1, 1.0] do
+        assert_raise ArgumentError, fn -> Board.pack([bad, 0]) end
+      end
+    end
+  end
 end
