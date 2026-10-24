@@ -54,18 +54,29 @@ defmodule NeonPerceptron.NetworkStateTest do
           "dense_0" => [
             # row-major: input[0]→h[0], input[0]→h[1], input[0]→h[2],
             #            input[1]→h[0], input[1]→h[1], input[1]→h[2], ...
-            0.1, 0.2, 0.3,
-            0.4, 0.5, 0.6,
-            0.7, 0.8, 0.9,
-            1.0, 1.1, 1.2
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+            0.9,
+            1.0,
+            1.1,
+            1.2
           ],
           "dense_1" => [
             # hidden[0]→out[0], hidden[0]→out[1],
             # hidden[1]→out[0], hidden[1]→out[1],
             # hidden[2]→out[0], hidden[2]→out[1]
-            0.3, 0.4,
-            0.5, 0.6,
-            0.7, 0.8
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8
           ]
         },
         topology: @topology
@@ -99,15 +110,26 @@ defmodule NeonPerceptron.NetworkStateTest do
         },
         weights: %{
           "dense_0" => [
-            0.1, 0.2, 0.3,
-            0.4, 0.5, 0.6,
-            0.7, 0.8, 0.9,
-            1.0, 1.1, 1.2
+            0.1,
+            0.2,
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8,
+            0.9,
+            1.0,
+            1.1,
+            1.2
           ],
           "dense_1" => [
-            0.3, 0.4,
-            0.5, 0.6,
-            0.7, 0.8
+            0.3,
+            0.4,
+            0.5,
+            0.6,
+            0.7,
+            0.8
           ]
         },
         topology: @topology

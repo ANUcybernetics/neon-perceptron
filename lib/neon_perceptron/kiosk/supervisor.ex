@@ -21,11 +21,14 @@ defmodule NeonPerceptron.Kiosk.Supervisor do
     if System.find_executable("seatd") do
       File.rm("/run/seatd.sock")
 
-      [%{
-        id: :seatd,
-        start: {MuonTrap.Daemon, :start_link,
-          ["seatd", ["-g", "root"], [env: [{"SEATD_VTBOUND", "0"}], log_output: :debug]]}
-      }]
+      [
+        %{
+          id: :seatd,
+          start:
+            {MuonTrap.Daemon, :start_link,
+             ["seatd", ["-g", "root"], [env: [{"SEATD_VTBOUND", "0"}], log_output: :debug]]}
+        }
+      ]
     else
       []
     end

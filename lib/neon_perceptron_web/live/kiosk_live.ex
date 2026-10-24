@@ -129,7 +129,9 @@ defmodule NeonPerceptronWeb.KioskLive do
       target_rows = Nx.to_list(targets)
 
       Enum.zip(input_rows, target_rows)
-      |> Enum.group_by(fn {_inp, tgt} -> Enum.find_index(tgt, &(&1 == 1.0)) end, fn {inp, _} -> inp end)
+      |> Enum.group_by(fn {_inp, tgt} -> Enum.find_index(tgt, &(&1 == 1.0)) end, fn {inp, _} ->
+        inp
+      end)
       |> then(fn grouped -> Enum.map(0..(num_classes - 1), &Map.get(grouped, &1, [])) end)
     else
       []
@@ -369,8 +371,11 @@ defmodule NeonPerceptronWeb.KioskLive do
 
       for row <- 0..1, col <- 0..1 do
         %{
-          x: gx + col * @grid_stride, y: gy + row * @grid_stride,
-          w: @grid_cell, h: @grid_cell, rx: 1,
+          x: gx + col * @grid_stride,
+          y: gy + row * @grid_stride,
+          w: @grid_cell,
+          h: @grid_cell,
+          rx: 1,
           fill: if(row * 2 + col == idx, do: "#3c8cff", else: "#333")
         }
       end
@@ -397,7 +402,9 @@ defmodule NeonPerceptronWeb.KioskLive do
           %{
             x: gx + rem(cell_idx, 2) * @grid_stride,
             y: gy + div(cell_idx, 2) * @grid_stride,
-            w: @grid_cell, h: @grid_cell, rx: 1,
+            w: @grid_cell,
+            h: @grid_cell,
+            rx: 1,
             fill: if(val == 1.0, do: "#3c8cff", else: "#333")
           }
         end)
@@ -427,7 +434,10 @@ defmodule NeonPerceptronWeb.KioskLive do
       end
 
     %{
-      x1: x1, y1: y1, x2: x2, y2: y2,
+      x1: x1,
+      y1: y1,
+      x2: x2,
+      y2: y2,
       stroke: stroke,
       opacity: Float.round(opacity, 2),
       width: Float.round(width, 1)

@@ -41,7 +41,7 @@ defmodule NeonPerceptron.Trainer do
     training_data = config.training_data_fn.()
     topology = config.topology
 
-    loss = config[:loss_fn] || &default_loss_fn/2
+    loss = config[:loss_fn] || (&default_loss_fn/2)
     {init_fn, step_fn} = Axon.Loop.train_step(model, loss, :adam)
     {_, predict_fn} = Axon.build(model)
     step_state = init_fn.(training_data, Axon.ModelState.empty())

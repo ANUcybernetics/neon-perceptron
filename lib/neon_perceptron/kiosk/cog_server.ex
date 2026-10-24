@@ -26,7 +26,15 @@ defmodule NeonPerceptron.Kiosk.CogServer do
         {:ok, %{mode: :simulation, url: url, platform: platform, pid: nil, monitor_ref: nil}}
 
       _path ->
-        state = %{mode: :hardware, url: url, platform: platform, pid: nil, monitor_ref: nil, started_at: nil}
+        state = %{
+          mode: :hardware,
+          url: url,
+          platform: platform,
+          pid: nil,
+          monitor_ref: nil,
+          started_at: nil
+        }
+
         {:ok, state, {:continue, :start_cog}}
     end
   end
@@ -78,8 +86,7 @@ defmodule NeonPerceptron.Kiosk.CogServer do
   end
 
   defp cog_config(:drm, url) do
-    {["--platform=drm", url],
-     [{"XDG_RUNTIME_DIR", @xdg_runtime_dir}]}
+    {["--platform=drm", url], [{"XDG_RUNTIME_DIR", @xdg_runtime_dir}]}
   end
 
   defp cog_config(:wl, url) do

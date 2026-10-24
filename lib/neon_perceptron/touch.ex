@@ -89,6 +89,7 @@ defmodule NeonPerceptron.Touch do
         devices
         |> Enum.find(fn {_path, info} ->
           name = String.downcase(info.name)
+
           String.contains?(name, "greentouch") or String.contains?(name, "goodix") or
             String.contains?(name, "touchscreen")
         end)
