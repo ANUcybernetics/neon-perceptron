@@ -40,7 +40,7 @@ defmodule NeonPerceptron.MixProject do
       {:nerves, "~> 1.11", runtime: false},
       {:shoehorn, "~> 0.9.3"},
       {:ring_logger, "~> 0.11.4"},
-      {:toolshed, "~> 0.4.2"},
+      {:toolshed, "~> 0.5"},
       {:req, "~> 0.5"},
       {:input_event, "~> 1.4"},
 
@@ -66,7 +66,7 @@ defmodule NeonPerceptron.MixProject do
       {:plug_cowboy, "~> 2.7"},
 
       # Kiosk display (Weston + Cog browser management)
-      {:muontrap, "~> 1.7"},
+      {:muontrap, "~> 1.7 or ~> 2.0"},
 
       # Development tools
       {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},
