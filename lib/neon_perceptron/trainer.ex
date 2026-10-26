@@ -18,10 +18,6 @@ defmodule NeonPerceptron.Trainer do
   """
   use GenServer
 
-  # EMLX is only a dep on :host / reTerminal DM (see mix.exs). On :rpi4 the
-  # NIF module doesn't exist, but eval_step_state/1 guards calls at runtime.
-  @compile {:no_warn_undefined, EMLX.NIF}
-
   require Logger
 
   alias NeonPerceptron.NetworkState
@@ -44,6 +40,8 @@ defmodule NeonPerceptron.Trainer do
     loss = config[:loss_fn] || (&default_loss_fn/2)
     {init_fn, step_fn} = Axon.Loop.train_step(model, loss, :adam)
     {_, predict_fn} = Axon.build(model)
+    # Compile each into a single EXLA computation, as Axon.Loop.run/4 does
+    [init_fn, step_fn, predict_fn] = Enum.map([init_fn, step_fn, predict_fn], &Nx.Defn.jit/1)
     step_state = init_fn.(training_data, Axon.ModelState.empty())
 
     state = %{
@@ -72,7 +70,6 @@ defmodule NeonPerceptron.Trainer do
   @impl true
   def handle_info(:train_step, state) do
     step_state = state.step_fn.(state.training_data, state.step_state)
-    eval_step_state(step_state)
     iteration = Nx.to_number(step_state.i)
 
     if rem(iteration, @training_log_interval) == 0 do
@@ -294,29 +291,4 @@ defmodule NeonPerceptron.Trainer do
         "topology=#{inspect(Map.values(topology.sizes))}"
     )
   end
-
-  defp eval_step_state(step_state) do
-    if Code.ensure_loaded?(EMLX.Backend) and function_exported?(EMLX.NIF, :eval, 1) do
-      do_eval_step_state(step_state)
-    end
-  end
-
-  defp do_eval_step_state(step_state) do
-    %{model_state: %{data: data}, optimizer_state: {_, opt}} = step_state
-
-    for {_, layer} <- data, {_, tensor} <- layer, do: emlx_eval(tensor)
-    emlx_eval(opt.count)
-    for {_, layer} <- opt.mu, {_, tensor} <- layer, do: emlx_eval(tensor)
-    for {_, layer} <- opt.nu, {_, tensor} <- layer, do: emlx_eval(tensor)
-
-    :ok
-  end
-
-  defp emlx_eval(%Nx.Tensor{data: %{ref: {_device, ref}}}) when is_reference(ref) do
-    EMLX.NIF.eval(ref)
-  rescue
-    _ -> :ok
-  end
-
-  defp emlx_eval(_), do: :ok
 end

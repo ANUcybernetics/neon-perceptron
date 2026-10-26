@@ -4,6 +4,12 @@ defmodule NeonPerceptron.MixProject do
   @app :neon_perceptron
   @version "0.1.0"
   @all_targets [:reterminal_dm, :rpi4, :rpi5]
+  # Boards that run the trainer. EXLA's ~270 MB XLA library won't fit the
+  # stock rpi4/rpi5 rootfs, so the LED boards use Nx.BinaryBackend.
+  @exla_targets [:host, :reterminal_dm]
+
+  if Mix.target() == :reterminal_dm,
+    do: System.put_env("XLA_TARGET_PLATFORM", "aarch64-linux-gnu")
 
   def project do
     [
@@ -15,6 +21,9 @@ defmodule NeonPerceptron.MixProject do
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
+      # EXLA builds its NIF inside its deps dir, so each target needs its own
+      # deps dir or a firmware build clobbers the host's libexla.so
+      deps_path: if(Mix.target() == :host, do: "deps", else: "deps_#{Mix.target()}"),
       releases: [{@app, release()}]
     ]
   end
@@ -51,10 +60,10 @@ defmodule NeonPerceptron.MixProject do
       {:circuits_spi, "~> 2.0"},
 
       # AI stuff
-      {:axon, "~> 0.7"},
-      {:emlx, github: "elixir-nx/emlx", branch: "main", targets: :host},
+      {:axon, "~> 0.9"},
+      {:exla, "~> 1.0", targets: @exla_targets},
       {:scidata, "~> 0.1", only: :test},
-      {:nx_image, "~> 0.1.0", only: :test},
+      {:nx_image, "~> 0.2", only: :test},
       {:lazy_html, ">= 0.1.0", only: :test},
 
       # Phoenix (web UI on host and kiosk on target)

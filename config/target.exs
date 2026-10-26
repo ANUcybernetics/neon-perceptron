@@ -1,8 +1,5 @@
 import Config
 
-# Use the default Nx.BinaryBackend on the target for now.
-# NxEigen's precompiled NIF doesn't cross-compile cleanly for Nerves.
-
 # Use Ringlogger as the logger backend and remove :console.
 # See https://hexdocs.pm/ring_logger/readme.html for more information on
 # configuring ring_logger.

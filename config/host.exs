@@ -2,8 +2,6 @@ import Config
 
 # Add configuration that is only needed when running on the host here.
 
-config :nx, default_backend: EMLX.Backend
-
 # Hardware configuration for host environment (development/testing)
 # When running on host, hardware is typically not available, so modules
 # should gracefully degrade to simulation mode

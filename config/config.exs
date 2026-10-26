@@ -13,6 +13,10 @@ Application.start(:nerves_bootstrap)
 
 config :nerves, :firmware, rootfs_overlay: "rootfs_overlay"
 
+if Mix.target() in [:host, :reterminal_dm] do
+  config :nx, default_backend: EXLA.Backend, default_defn_options: [compiler: EXLA]
+end
+
 case Mix.target() do
   :reterminal_dm ->
     config :nerves, :firmware, fwup_conf: "config/reterminal_dm/fwup.conf"
