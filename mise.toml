@@ -1,7 +1,7 @@
 [tools]
 erlang = "28.4.2"
 elixir = "1.19.5-otp-28"
-node = "latest"
+node = "26"
 pnpm = "latest"
 
 [env]
