@@ -79,7 +79,6 @@ defmodule NeonPerceptron.MixProject do
 
       # Development tools
       {:igniter, "~> 0.5", only: [:dev, :test], runtime: false},
-      {:tidewave, "~> 0.5", only: :dev},
       {:usage_rules, "~> 1.2", only: [:dev, :test], runtime: false},
 
       # Allow Nerves.Runtime on host to support development, testing and CI.
